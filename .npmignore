@@ -1,0 +1,6 @@
+# Exclude from package distribution (UPM tarball / Asset Store)
+Tests/
+Tests.meta
+docs/
+docs.meta
+.gitignore
