@@ -1,8 +1,8 @@
 # realvirtual Unity MCP Package
 
-**Give AI agents full control over your Unity Editor - scenes, GameObjects, components, simulation, and more.**
+**Give AI agents full control over your Unity Editor - scenes, GameObjects, components, simulation, digital twins, and more.**
 
-This open-source Unity package implements a [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that lets AI agents like Claude, Cursor, or any MCP-compatible client interact with Unity in real time.
+This open-source Unity package implements a [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that lets AI agents like Claude, Cursor, or any MCP-compatible client interact with Unity in real time. Built for **any Unity project** - including industrial digital twins, robotics simulation, and virtual commissioning.
 
 ### Why This MCP Server Is Different
 
