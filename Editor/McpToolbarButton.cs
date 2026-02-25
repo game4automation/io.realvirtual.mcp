@@ -20,7 +20,7 @@ namespace realvirtual.MCP
     //! or most recently completed MCP tool call. Fully independent of the realvirtual
     //! toolbar system so it can be delivered as a separate package.
     #endregion
-    [Overlay(typeof(SceneView), OVERLAY_ID, "MCP", true)]
+    [Overlay(typeof(SceneView), OVERLAY_ID, "realvirtual MCP", true)]
     public class McpToolbarOverlay : ToolbarOverlay
     {
         public const string OVERLAY_ID = "mcp-toolbar-overlay";
@@ -284,16 +284,18 @@ namespace realvirtual.MCP
 
         private void UpdateStatus()
         {
-            bool configured = McpClaudeDesktopConfigurator.IsConfigured;
             bool deployed = McpPythonDownloader.IsDeployed();
-            bool allGood = configured && deployed;
 
-            _button.style.color = allGood
-                ? new StyleColor(new Color(0.3f, 0.69f, 0.31f))
-                : new StyleColor(new Color(0.9f, 0.75f, 0.2f));
-            _button.tooltip = allGood
-                ? "MCP Setup complete - click for options"
-                : "MCP Setup needed - click to configure";
+            if (!deployed)
+            {
+                _button.style.color = new StyleColor(new Color(0.94f, 0.35f, 0.35f));
+                _button.tooltip = "MCP Setup needed - Python not installed";
+            }
+            else
+            {
+                _button.style.color = new StyleColor(new Color(0.62f, 0.62f, 0.62f));
+                _button.tooltip = "MCP Settings";
+            }
         }
     }
 

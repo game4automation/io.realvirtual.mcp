@@ -44,10 +44,15 @@ namespace realvirtual.MCP
                 return false;
 
             // Embedded Python uses a small launcher exe (~105KB) that loads python3XX.dll.
-            // Check the DLL exists and is large enough (not an LFS pointer ~130 bytes).
+            // python3.dll is a tiny stub (~70KB); the real runtime is python312.dll (~6.9MB).
+            // Check that at least one DLL in the directory exceeds 1MB (the real runtime).
             var pythonDir = Path.GetDirectoryName(pythonExe);
-            var dlls = Directory.GetFiles(pythonDir, "python3*.dll");
-            return dlls.Length > 0 && new FileInfo(dlls[0]).Length > 1_000_000;
+            foreach (var dll in Directory.GetFiles(pythonDir, "python3*.dll"))
+            {
+                if (new FileInfo(dll).Length > 1_000_000)
+                    return true;
+            }
+            return false;
         }
 
         static McpPythonDownloader()
