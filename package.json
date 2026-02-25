@@ -1,6 +1,6 @@
 {
   "name": "io.realvirtual.mcp",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "displayName": "realvirtual MCP Server",
   "description": "MCP Server bridge for AI agent integration with realvirtual Digital Twins. Enables Unity simulation control through MCP protocol via WebSocket.",
   "unity": "6000.0",

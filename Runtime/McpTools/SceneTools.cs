@@ -17,15 +17,44 @@ namespace realvirtual.MCP.Tools
     //! These tools enable AI agents to explore and understand the scene structure.
     public static class SceneTools
     {
-        //! Gets the scene hierarchy structure with configurable depth and optional root
+        //! Gets the scene hierarchy structure with configurable depth and optional root.
+        //! Prefab-stage-aware: when a prefab is open for editing, returns the prefab hierarchy.
         [McpTool("Get scene hierarchy")]
         public static string SceneHierarchy(
             [McpParam("Max depth to traverse (default 3)")] int depth = 3,
             [McpParam("Root GameObject name/path to start from (optional, empty=full scene)")] string root = "")
         {
-            var scene = SceneManager.GetActiveScene();
-
             var arr = new JArray();
+            var result = new JObject();
+
+#if UNITY_EDITOR
+            // When in prefab stage, show prefab hierarchy instead of scene
+            var prefabRoot = ToolHelpers.GetPrefabStageRoot();
+            if (prefabRoot != null)
+            {
+                if (!string.IsNullOrEmpty(root))
+                {
+                    var rootGo = ToolHelpers.FindGameObject(root);
+                    if (rootGo == null)
+                        return ToolHelpers.Error($"Root GameObject '{root}' not found");
+                    arr.Add(BuildGameObjectInfo(rootGo, 0, maxDepth: depth));
+                }
+                else
+                {
+                    arr.Add(BuildGameObjectInfo(prefabRoot, 0, maxDepth: depth));
+                }
+
+                var stage = UnityEditor.SceneManagement.PrefabStageUtility.GetCurrentPrefabStage();
+                result["prefabStage"] = true;
+                result["prefabPath"] = stage.assetPath;
+                result["rootObjects"] = arr;
+                result["depth"] = depth;
+                result["count"] = arr.Count;
+                return result.ToString(Newtonsoft.Json.Formatting.None);
+            }
+#endif
+
+            var scene = SceneManager.GetActiveScene();
 
             if (!string.IsNullOrEmpty(root))
             {
@@ -43,16 +72,15 @@ namespace realvirtual.MCP.Tools
                 }
             }
 
-            return new JObject
-            {
-                ["scene"] = scene.name,
-                ["rootObjects"] = arr,
-                ["depth"] = depth,
-                ["count"] = arr.Count
-            }.ToString(Newtonsoft.Json.Formatting.None);
+            result["scene"] = scene.name;
+            result["rootObjects"] = arr;
+            result["depth"] = depth;
+            result["count"] = arr.Count;
+            return result.ToString(Newtonsoft.Json.Formatting.None);
         }
 
-        //! Finds GameObjects by name
+        //! Finds GameObjects by name.
+        //! Prefab-stage-aware: when a prefab is open, searches within prefab contents.
         [McpTool("Find GameObjects by name")]
         public static string SceneFind(
             [McpParam("Search term")] string searchTerm)
@@ -60,7 +88,7 @@ namespace realvirtual.MCP.Tools
             if (string.IsNullOrEmpty(searchTerm))
                 return ToolHelpers.Error("Search term cannot be empty");
 
-            var allObjects = Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var allObjects = ToolHelpers.GetAllGameObjectsInContext();
             var arr = new JArray();
 
             foreach (var obj in allObjects)
@@ -76,12 +104,17 @@ namespace realvirtual.MCP.Tools
                 }
             }
 
-            return new JObject
+            var result = new JObject
             {
                 ["objects"] = arr,
                 ["count"] = arr.Count,
                 ["searchTerm"] = searchTerm
-            }.ToString(Newtonsoft.Json.Formatting.None);
+            };
+
+            if (ToolHelpers.IsInPrefabStage())
+                result["prefabStage"] = true;
+
+            return result.ToString(Newtonsoft.Json.Formatting.None);
         }
 
         //! Gets transform information for a GameObject

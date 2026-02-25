@@ -3,8 +3,8 @@
 // Licensed under the MIT License. See LICENSE file for details.
 
 using System;
+using System.Diagnostics;
 using System.IO;
-using System.IO.Compression;
 using UnityEditor;
 using UnityEngine;
 
@@ -12,15 +12,13 @@ namespace realvirtual.MCP
 {
     //! Manages the MCP Python server deployment in StreamingAssets.
     //!
-    //! The Python server (including embedded Python runtime) is shipped in
-    //! Assets/StreamingAssets/realvirtual-MCP/ so it is available both in the editor
-    //! and in runtime builds. This class provides download/update from GitHub Releases
-    //! as a fallback if the server files are missing.
+    //! The Python server (including embedded Python runtime) is cloned from the
+    //! GitHub repository into Assets/StreamingAssets/realvirtual-MCP/.
+    //! This class provides git clone/pull operations as the primary deployment method.
     [InitializeOnLoad]
     static class McpPythonDownloader
     {
-        private const string RELEASE_ZIP_URL =
-            "https://github.com/realvirtual/unity-mcp-python/releases/latest/download/unity-mcp-python.zip";
+        private const string REPO_URL = "https://github.com/game4automation/realvirtual-MCP.git";
         private const string TARGET_FOLDER = "realvirtual-MCP";
         private const string SESSION_KEY_DISMISSED = "McpPythonDownloader_dismissed";
 
@@ -55,9 +53,15 @@ namespace realvirtual.MCP
             return false;
         }
 
+        //! Checks whether the target directory is a git repository.
+        internal static bool IsGitRepo()
+        {
+            var gitDir = Path.Combine(GetPythonServerPath(), ".git");
+            return Directory.Exists(gitDir);
+        }
+
         static McpPythonDownloader()
         {
-            // Use EditorApplication.update instead of delayCall (more reliable when Unity is in background)
             EditorApplication.update += CheckOnce;
         }
 
@@ -77,7 +81,7 @@ namespace realvirtual.MCP
             if (!EditorUtility.DisplayDialog(
                 "MCP Python Server",
                 "The MCP Python Server needs to be downloaded (~70 MB).\n\n" +
-                "This is required for AI agent communication.\n" +
+                "This requires git to be installed.\n" +
                 "Target: " + GetPythonServerPath(),
                 "Download Now", "Later"))
             {
@@ -88,51 +92,129 @@ namespace realvirtual.MCP
             DownloadPythonServer();
         }
 
-        //! Downloads and extracts the Python server ZIP from GitHub Releases into StreamingAssets.
-        internal static void DownloadPythonServer()
+        //! Runs a git command and returns the exit code. Stdout/stderr are captured.
+        private static int RunGit(string arguments, string workingDir, out string output, out string error)
         {
-            var target = GetPythonServerPath();
-            var zipPath = Path.Combine(Path.GetTempPath(), "unity-mcp-python.zip");
+            var psi = new ProcessStartInfo
+            {
+                FileName = "git",
+                Arguments = arguments,
+                WorkingDirectory = workingDir,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
 
-            EditorUtility.DisplayProgressBar("MCP Setup", "Downloading Python server...", 0.1f);
             try
             {
-                // 1. Download ZIP
-                using (var client = new System.Net.WebClient())
+                using (var process = Process.Start(psi))
                 {
-                    client.DownloadFile(RELEASE_ZIP_URL, zipPath);
+                    output = process.StandardOutput.ReadToEnd();
+                    error = process.StandardError.ReadToEnd();
+                    process.WaitForExit(300_000); // 5 min timeout
+                    return process.ExitCode;
                 }
-
-                EditorUtility.DisplayProgressBar("MCP Setup", "Extracting...", 0.6f);
-
-                // 2. Remove old installation if present
-                if (Directory.Exists(target))
-                    Directory.Delete(target, true);
-
-                // 3. Extract ZIP
-                Directory.CreateDirectory(target);
-                ZipFile.ExtractToDirectory(zipPath, target);
-
-                // 4. Clean up ZIP
-                File.Delete(zipPath);
-
-                // 5. Write version marker
-                var versionFile = Path.Combine(target, ".mcp-version");
-                File.WriteAllText(versionFile, "1.0.0");
-
-                // 6. Refresh so Unity picks up the new files
-                AssetDatabase.Refresh();
-
-                McpLog.Info($"Python server installed to {target}");
             }
             catch (Exception e)
             {
-                McpLog.Error($"Download failed: {e.Message}");
+                output = "";
+                error = e.Message;
+                return -1;
+            }
+        }
+
+        //! Checks whether git is available on the system.
+        internal static bool IsGitAvailable()
+        {
+            var code = RunGit("--version", Application.dataPath, out _, out _);
+            return code == 0;
+        }
+
+        //! Clones the Python server repository into StreamingAssets.
+        internal static void DownloadPythonServer()
+        {
+            if (!IsGitAvailable())
+            {
                 EditorUtility.DisplayDialog("MCP Setup Error",
-                    $"Failed to download Python server.\n\n{e.Message}\n\n" +
+                    "git is not installed or not in PATH.\n\n" +
+                    "Please install git from https://git-scm.com and try again.\n\n" +
+                    "Alternative: manually clone the repository:\n" +
+                    $"git clone {REPO_URL}\n" +
+                    $"into {GetPythonServerPath()}",
+                    "OK");
+                return;
+            }
+
+            var target = GetPythonServerPath();
+            var streamingAssets = Path.Combine(Application.dataPath, "StreamingAssets");
+
+            EditorUtility.DisplayProgressBar("MCP Setup", "Cloning Python server repository...", 0.2f);
+            try
+            {
+                // Ensure StreamingAssets directory exists
+                if (!Directory.Exists(streamingAssets))
+                    Directory.CreateDirectory(streamingAssets);
+
+                // Remove old installation if present but not a git repo
+                if (Directory.Exists(target) && !IsGitRepo())
+                {
+                    Directory.Delete(target, true);
+                }
+
+                if (Directory.Exists(target) && IsGitRepo())
+                {
+                    // Already a git repo - pull latest
+                    EditorUtility.DisplayProgressBar("MCP Setup", "Pulling latest changes...", 0.4f);
+                    var code = RunGit("pull origin master", target, out var pullOut, out var pullErr);
+                    if (code != 0)
+                    {
+                        McpLog.Error($"git pull failed: {pullErr}");
+                        EditorUtility.DisplayDialog("MCP Setup Error",
+                            $"git pull failed:\n\n{pullErr}",
+                            "OK");
+                        return;
+                    }
+                    McpLog.Info($"Python server updated: {pullOut.Trim()}");
+                }
+                else
+                {
+                    // Fresh clone
+                    var code = RunGit($"clone {REPO_URL} {TARGET_FOLDER}", streamingAssets,
+                        out var cloneOut, out var cloneErr);
+                    if (code != 0)
+                    {
+                        McpLog.Error($"git clone failed: {cloneErr}");
+                        EditorUtility.DisplayDialog("MCP Setup Error",
+                            $"Failed to clone Python server.\n\n{cloneErr}\n\n" +
+                            "Manual alternative:\n" +
+                            $"git clone {REPO_URL}\n" +
+                            $"into {target}",
+                            "OK");
+                        return;
+                    }
+                    McpLog.Info($"Python server cloned to {target}");
+                }
+
+                EditorUtility.DisplayProgressBar("MCP Setup", "Refreshing assets...", 0.9f);
+
+                // Write version marker
+                var versionFile = Path.Combine(target, ".mcp-version");
+                File.WriteAllText(versionFile, McpVersion.Version);
+
+                // Refresh so Unity picks up the new files
+                AssetDatabase.Refresh();
+
+                McpLog.Info("MCP Python server ready");
+            }
+            catch (Exception e)
+            {
+                McpLog.Error($"Setup failed: {e.Message}");
+                EditorUtility.DisplayDialog("MCP Setup Error",
+                    $"Failed to set up Python server.\n\n{e.Message}\n\n" +
                     "Manual alternative:\n" +
-                    $"Download from {RELEASE_ZIP_URL}\n" +
-                    $"Extract to {target}",
+                    $"git clone {REPO_URL}\n" +
+                    $"into {target}",
                     "OK");
             }
             finally
@@ -141,24 +223,58 @@ namespace realvirtual.MCP
             }
         }
 
-        //! Re-downloads the Python server (for updates). Deletes existing installation first.
+        //! Updates the Python server by pulling latest from the repository.
         internal static void UpdatePythonServer()
         {
             var target = GetPythonServerPath();
-            if (Directory.Exists(target))
+
+            if (!Directory.Exists(target) || !IsGitRepo())
             {
-                try
-                {
-                    Directory.Delete(target, true);
-                }
-                catch (Exception e)
-                {
-                    McpLog.Error($"Failed to remove old installation: {e.Message}");
-                    return;
-                }
+                // Not a git repo - do a fresh clone
+                DownloadPythonServer();
+                return;
             }
 
-            DownloadPythonServer();
+            if (!IsGitAvailable())
+            {
+                EditorUtility.DisplayDialog("MCP Setup Error",
+                    "git is not installed or not in PATH.\n\n" +
+                    "Please install git from https://git-scm.com and try again.",
+                    "OK");
+                return;
+            }
+
+            EditorUtility.DisplayProgressBar("MCP Setup", "Pulling latest changes...", 0.3f);
+            try
+            {
+                var code = RunGit("pull origin master", target, out var output, out var error);
+                if (code != 0)
+                {
+                    McpLog.Error($"git pull failed: {error}");
+                    EditorUtility.DisplayDialog("MCP Setup Error",
+                        $"git pull failed:\n\n{error}",
+                        "OK");
+                    return;
+                }
+
+                // Write version marker
+                var versionFile = Path.Combine(target, ".mcp-version");
+                File.WriteAllText(versionFile, McpVersion.Version);
+
+                AssetDatabase.Refresh();
+                McpLog.Info($"Python server updated: {output.Trim()}");
+            }
+            catch (Exception e)
+            {
+                McpLog.Error($"Update failed: {e.Message}");
+                EditorUtility.DisplayDialog("MCP Setup Error",
+                    $"Failed to update Python server.\n\n{e.Message}",
+                    "OK");
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
+            }
         }
     }
 }

@@ -281,7 +281,7 @@ namespace realvirtual.MCP
                 sb.Append("}");
             }
 
-            sb.Append("],\"schema_version\":\"1.0.0\"}");
+            sb.Append($"],\"schema_version\":\"{McpVersion.Version}\"}}");
             return sb.ToString();
         }
 

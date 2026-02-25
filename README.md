@@ -63,6 +63,16 @@ This Unity Package (C# WebSocket server + tool registry)
 2. Click **+ > Add package from git URL**
 3. Enter: `https://github.com/game4automation/io.realvirtual.mcp.git`
 
+### Updating
+
+Unity caches git packages by commit hash. To get the latest version:
+
+1. Open **Window > Package Manager**
+2. Select **realvirtual MCP Server**
+3. Click **Update** (if available)
+
+If no update button appears, remove the lock entry for `io.realvirtual.mcp` from `Packages/packages-lock.json` and reopen Unity.
+
 ### Requirements
 
 - Unity 6000.0+
@@ -70,20 +80,42 @@ This Unity Package (C# WebSocket server + tool registry)
 
 ## Setup
 
+### Automated Setup (recommended)
+
 After installing the Unity package:
 
 1. A **brain icon** appears in the Unity toolbar - this is the MCP status indicator
 2. Click the **gear icon** next to it to open the setup popup
-3. Click **Download Python Server** - this downloads the embedded Python runtime (~70 MB) to `Assets/StreamingAssets/realvirtual-MCP/`
+3. Click **Clone Python Server** - this runs `git clone` to download the Python server (~70 MB) into `Assets/StreamingAssets/realvirtual-MCP/`
 4. Click **Configure Claude** - this writes the MCP configuration to Claude Desktop and/or Claude Code
+
+To update later, click **Update Python Server (git pull)** in the same popup.
 
 <img src="docs/mcp-setup.png" alt="MCP Setup Popup" width="500">
 
-The Python MCP server is available separately at **[github.com/game4automation/realvirtual-MCP](https://github.com/game4automation/realvirtual-MCP)**.
-
-You can also access setup via the Unity menu: **realvirtual > MCP**
+You can also access setup via the Unity menu: **Tools > realvirtual > MCP**
 
 <img src="docs/mcp-menu.png" alt="MCP Menu" width="500">
+
+### Manual Setup
+
+If you prefer to set up manually or the automated setup doesn't work:
+
+1. Clone the Python server repository:
+   ```bash
+   cd <your-project>/Assets/StreamingAssets
+   git clone https://github.com/game4automation/realvirtual-MCP.git
+   ```
+
+2. To update later:
+   ```bash
+   cd <your-project>/Assets/StreamingAssets/realvirtual-MCP
+   git pull
+   ```
+
+3. Configure your MCP client manually (see [Python MCP Server](https://github.com/game4automation/realvirtual-MCP) for configuration details)
+
+The Python MCP server is available separately at **[github.com/game4automation/realvirtual-MCP](https://github.com/game4automation/realvirtual-MCP)**.
 
 ## How It Works
 
@@ -192,6 +224,12 @@ The Python server that bridges MCP clients to this Unity package is maintained s
 **[github.com/game4automation/realvirtual-MCP](https://github.com/game4automation/realvirtual-MCP)**
 
 It ships with an embedded Python 3.12 runtime and can be downloaded directly from the Unity toolbar popup.
+
+## Support
+
+This package is provided **as-is** with no support or service included.
+
+For commercial customers of [realvirtual](https://realvirtual.io), we offer professional services for **digital twin development**, **virtual commissioning**, and **LLM/AI agent integration**. Contact us at https://realvirtual.io for details.
 
 ## License
 

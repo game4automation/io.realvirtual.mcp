@@ -8,7 +8,6 @@ using UnityEditor;
 using UnityEditor.Overlays;
 using UnityEditor.Toolbars;
 using UnityEngine.UIElements;
-using System;
 
 namespace realvirtual.MCP
 {
@@ -44,22 +43,27 @@ namespace realvirtual.MCP
     sealed class McpStatusButton : EditorToolbarDropdown
     {
         public const string ID = "McpStatusButton";
-        private static Font _mcpFont;
+        private static Texture2D _brainIcon;
+        private Image _iconImage;
 
         public McpStatusButton()
         {
-            // Set brain icon
-            int unicode = Convert.ToInt32("e10e", 16);
-            text = char.ConvertFromUtf32(unicode);
+            text = "";
 
-            if (_mcpFont == null)
-                _mcpFont = AssetDatabase.LoadAssetAtPath<Font>(
-                    "Packages/io.realvirtual.mcp/Editor/Fonts/MaterialSymbolsOutlined.ttf");
+            if (_brainIcon == null)
+                _brainIcon = AssetDatabase.LoadAssetAtPath<Texture2D>(
+                    "Packages/io.realvirtual.mcp/Editor/Icons/mcp-brain.png");
 
-            if (_mcpFont != null)
+            style.alignItems = Align.Center;
+
+            if (_brainIcon != null)
             {
-                style.unityFontDefinition = new StyleFontDefinition(_mcpFont);
-                style.fontSize = 18;
+                _iconImage = new Image { image = _brainIcon };
+                _iconImage.style.width = 22;
+                _iconImage.style.height = 22;
+                _iconImage.style.alignSelf = Align.Center;
+                _iconImage.tintColor = new Color(0.62f, 0.62f, 0.62f);
+                Insert(0, _iconImage);
             }
 
             tooltip = "MCP Server: Checking...";
@@ -82,10 +86,12 @@ namespace realvirtual.MCP
 
         private void UpdateStatus()
         {
+            if (_iconImage == null) return;
+
             if (EditorApplication.isCompiling)
             {
                 tooltip = "MCP Server: Compiling...";
-                style.color = new StyleColor(new Color(0.9f, 0.75f, 0.2f));
+                _iconImage.tintColor = new Color(0.9f, 0.75f, 0.2f);
             }
             else if (McpEditorBridge.IsRunning)
             {
@@ -94,14 +100,14 @@ namespace realvirtual.MCP
                 tooltip = $"MCP Server: Running | Port {McpEditorBridge.Port} | {McpEditorBridge.ToolCount} tools | {clients} client{(clients != 1 ? "s" : "")}" +
                           (string.IsNullOrEmpty(hash) ? "" : $" | #{hash}");
                 if (clients > 0)
-                    style.color = new StyleColor(new Color(0.3f, 0.69f, 0.31f));
+                    _iconImage.tintColor = new Color(0.3f, 0.69f, 0.31f);
                 else
-                    style.color = new StyleColor(new Color(0.9f, 0.75f, 0.2f));
+                    _iconImage.tintColor = new Color(0.9f, 0.75f, 0.2f);
             }
             else
             {
                 tooltip = "MCP Server: Stopped";
-                style.color = new StyleColor(new Color(0.62f, 0.62f, 0.62f));
+                _iconImage.tintColor = new Color(0.62f, 0.62f, 0.62f);
             }
         }
     }
@@ -238,23 +244,29 @@ namespace realvirtual.MCP
     {
         public const string ID = "McpConfigButton";
         public EditorWindow containerWindow { get; set; }
-        private static Font _mcpFont;
+        private static Texture2D _gearIcon;
         private readonly Button _button;
+        private Image _iconImage;
 
         public McpConfigButton()
         {
             _button = new Button(OnClicked);
-            // Gear icon (Material Symbols: settings = e8b8)
-            _button.text = char.ConvertFromUtf32(0xe8b8);
+            _button.text = "";
 
-            if (_mcpFont == null)
-                _mcpFont = AssetDatabase.LoadAssetAtPath<Font>(
-                    "Packages/io.realvirtual.mcp/Editor/Fonts/MaterialSymbolsOutlined.ttf");
+            if (_gearIcon == null)
+                _gearIcon = AssetDatabase.LoadAssetAtPath<Texture2D>(
+                    "Packages/io.realvirtual.mcp/Editor/Icons/mcp-gear.png");
 
-            if (_mcpFont != null)
+            _button.style.alignItems = Align.Center;
+
+            if (_gearIcon != null)
             {
-                _button.style.unityFontDefinition = new StyleFontDefinition(_mcpFont);
-                _button.style.fontSize = 18;
+                _iconImage = new Image { image = _gearIcon };
+                _iconImage.style.width = 20;
+                _iconImage.style.height = 20;
+                _iconImage.style.alignSelf = Align.Center;
+                _iconImage.tintColor = new Color(0.62f, 0.62f, 0.62f);
+                _button.Add(_iconImage);
             }
 
             _button.style.borderLeftWidth = 0;
@@ -284,31 +296,51 @@ namespace realvirtual.MCP
 
         private void UpdateStatus()
         {
+            if (_iconImage == null) return;
             bool deployed = McpPythonDownloader.IsDeployed();
 
             if (!deployed)
             {
-                _button.style.color = new StyleColor(new Color(0.94f, 0.35f, 0.35f));
+                _iconImage.tintColor = new Color(0.94f, 0.35f, 0.35f);
                 _button.tooltip = "MCP Setup needed - Python not installed";
             }
             else
             {
-                _button.style.color = new StyleColor(new Color(0.62f, 0.62f, 0.62f));
+                _iconImage.tintColor = new Color(0.62f, 0.62f, 0.62f);
                 _button.tooltip = "MCP Settings";
             }
         }
     }
 
     //! Popup window for MCP configuration options.
-    //! Shows setup status and action buttons in a styled UI Toolkit popup.
+    //! Shows setup status, version info, and action buttons in a styled UI Toolkit popup.
     internal class McpConfigPopup : PopupWindowContent
     {
         private const float WINDOW_WIDTH = 260f;
-        private const float WINDOW_HEIGHT = 190f;
+        private const float WINDOW_HEIGHT = 230f;
 
         public override Vector2 GetWindowSize() => new Vector2(WINDOW_WIDTH, WINDOW_HEIGHT);
 
         public override void OnGUI(Rect rect) { }
+
+        private static string GetPythonServerVersion()
+        {
+            var serverPath = McpPythonDownloader.GetPythonServerPath();
+            var pyFile = System.IO.Path.Combine(serverPath, "unity_mcp_server.py");
+            if (!System.IO.File.Exists(pyFile)) return null;
+
+            foreach (var line in System.IO.File.ReadLines(pyFile))
+            {
+                if (line.StartsWith("__version__"))
+                {
+                    var start = line.IndexOf('"') + 1;
+                    var end = line.LastIndexOf('"');
+                    if (start > 0 && end > start)
+                        return line.Substring(start, end - start);
+                }
+            }
+            return null;
+        }
 
         public override void OnOpen()
         {
@@ -322,7 +354,9 @@ namespace realvirtual.MCP
 
             bool deployed = McpPythonDownloader.IsDeployed();
             bool configured = McpClaudeDesktopConfigurator.IsConfigured;
-            bool allGood = deployed && configured;
+            string pythonVersion = deployed ? GetPythonServerVersion() : null;
+            bool versionsMatch = pythonVersion == McpVersion.Version;
+            bool allGood = deployed && configured && versionsMatch;
 
             // Status bar
             var statusBar = new VisualElement();
@@ -355,6 +389,35 @@ namespace realvirtual.MCP
             chipsRow.Add(claudeChip);
 
             statusBar.Add(chipsRow);
+
+            // Version info row
+            var versionRow = new VisualElement();
+            versionRow.AddToClassList("chips-row");
+
+            var unityVersionChip = new Label($"Unity: v{McpVersion.Version}");
+            unityVersionChip.AddToClassList("info-chip-connected");
+            versionRow.Add(unityVersionChip);
+
+            if (deployed)
+            {
+                var pyVersionLabel = pythonVersion ?? "unknown";
+                var pyVersionChip = new Label($"Python: v{pyVersionLabel}");
+                pyVersionChip.AddToClassList(versionsMatch ? "info-chip-connected" : "info-chip");
+                versionRow.Add(pyVersionChip);
+            }
+
+            statusBar.Add(versionRow);
+
+            if (deployed && !versionsMatch)
+            {
+                var warnLabel = new Label("Version mismatch! Update Python server.");
+                warnLabel.style.color = new StyleColor(new Color(0.94f, 0.35f, 0.35f));
+                warnLabel.style.fontSize = 10;
+                warnLabel.style.paddingLeft = 12;
+                warnLabel.style.paddingTop = 2;
+                statusBar.Add(warnLabel);
+            }
+
             root.Add(statusBar);
 
             // Action buttons
@@ -383,7 +446,7 @@ namespace realvirtual.MCP
                     McpPythonDownloader.UpdatePythonServer();
                 editorWindow.Close();
             });
-            pythonBtn.text = deployed ? "Update Python Server" : "Download Python Server";
+            pythonBtn.text = deployed ? "Update Python Server (git pull)" : "Clone Python Server (git clone)";
             pythonBtn.AddToClassList("refresh-btn");
             pythonBtn.style.marginBottom = 4;
             pythonBtn.style.height = 24;

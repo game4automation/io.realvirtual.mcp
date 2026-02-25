@@ -25,7 +25,9 @@ namespace realvirtual.MCP.Tools
 #endif
         }
 
-        //! Creates a new empty GameObject
+        //! Creates a new empty GameObject.
+        //! Prefab-stage-aware: when no parent is specified and a prefab is open,
+        //! the new object is created under the prefab root.
         [McpTool("Create a new empty GameObject")]
         public static string GameObjectCreate(
             [McpParam("Name for the new GameObject")] string name,
@@ -42,6 +44,13 @@ namespace realvirtual.MCP.Tools
                     return ToolHelpers.Error($"Parent '{parent}' not found");
                 }
                 go.transform.SetParent(parentGo.transform);
+            }
+            else
+            {
+                // In prefab stage, auto-parent under prefab root so the object ends up in the prefab
+                var prefabRoot = ToolHelpers.GetPrefabStageRoot();
+                if (prefabRoot != null)
+                    go.transform.SetParent(prefabRoot.transform);
             }
 
 #if UNITY_EDITOR
@@ -91,6 +100,12 @@ namespace realvirtual.MCP.Tools
                     return ToolHelpers.Error($"Parent '{parent}' not found");
                 }
                 go.transform.SetParent(parentGo.transform);
+            }
+            else
+            {
+                var prefabRoot = ToolHelpers.GetPrefabStageRoot();
+                if (prefabRoot != null)
+                    go.transform.SetParent(prefabRoot.transform);
             }
 
 #if UNITY_EDITOR
