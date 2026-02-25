@@ -1,145 +1,92 @@
-# realvirtual Unity MCP Server
+# realvirtual Unity MCP Package
 
-**Python MCP bridge for AI agents to control Unity Digital Twin simulations.**
-
-This is the **Python server component** of the [realvirtual Unity MCP integration](https://assetstore.unity.com/packages/slug/311006). The Unity C# side (WebSocket handler, tool registry, editor integration) is available as a separate Unity package.
-
-## What This Does
-
-This Python server bridges AI agents (Claude Desktop, Claude Code, Cursor, etc.) with a running Unity Editor via WebSocket. Unity defines MCP tools in C# using `[McpTool]` attributes. This server discovers them automatically and exposes them as standard MCP tools.
+**Unity C# package that enables AI agents to control Unity Digital Twin simulations via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io).**
 
 ```
 AI Agent (Claude Desktop / Claude Code / Cursor)
     |
     | MCP Protocol (stdio or SSE)
-    |
     v
-This Python Server (FastMCP)
+Python MCP Server  -->  github.com/game4automation/realvirtual-MCP
     |
     | WebSocket (JSON, Port 18711)
-    |
     v
-Unity Editor (realvirtual MCP C# Package)
+This Unity Package (C# WebSocket server + tool registry)
 ```
 
-## Self-Contained
+## Installation
 
-This repository ships with an **embedded Python 3.12 runtime** and all dependencies pre-installed. No system Python installation required.
+### Via Unity Package Manager (Git URL)
 
-```
-python/              Embedded Python 3.12 (Windows x64)
-Lib/                 Pre-installed packages (mcp, websockets, etc.)
-unity_mcp_server.py  The MCP server
-start.bat            One-click launcher
-requirements.txt     Dependency list (for reference)
-```
+1. Open Unity **Window > Package Manager**
+2. Click **+ > Add package from git URL**
+3. Enter: `https://github.com/game4automation/io.realvirtual.mcp.git`
 
-## Quick Start
+### Requirements
 
-### Option A: Use with Claude Desktop or Claude Code
+- Unity 6000.0+
+- Newtonsoft JSON (`com.unity.nuget.newtonsoft-json`)
 
-The Unity package configures this automatically via the setup button. Manual configuration:
+## Setup
 
-**Claude Desktop** (`%APPDATA%/Claude/claude_desktop_config.json`):
-```json
-{
-  "mcpServers": {
-    "UnityMCP": {
-      "command": "C:/.../python/python.exe",
-      "args": ["C:/.../unity_mcp_server.py"],
-      "env": { "PYTHONPATH": "C:/.../Lib" }
-    }
-  }
-}
-```
+After installing the Unity package:
 
-**Claude Code** (`.mcp.json` in project root):
-```json
-{
-  "mcpServers": {
-    "UnityMCP": {
-      "command": "C:/.../python/python.exe",
-      "args": ["C:/.../unity_mcp_server.py"],
-      "env": { "PYTHONPATH": "C:/.../Lib" }
-    }
-  }
-}
-```
+1. A **brain icon** appears in the Unity toolbar - this is the MCP status indicator
+2. Click the **gear icon** next to it to open the setup popup
+3. Click **Download Python Server** - this downloads the embedded Python runtime (~70 MB) to `Assets/StreamingAssets/realvirtual-MCP/`
+4. Click **Configure Claude** - this writes the MCP configuration to Claude Desktop and/or Claude Code
 
-Replace `C:/...` with the actual path to your `StreamingAssets/realvirtual-MCP/` directory.
+<img src="docs/mcp-setup.png" alt="MCP Setup Popup" width="500">
 
-### Option B: Run Manually
+The Python MCP server is available separately at **[github.com/game4automation/realvirtual-MCP](https://github.com/game4automation/realvirtual-MCP)**.
 
-```batch
-start.bat
-```
+You can also access setup via the Unity menu: **realvirtual > MCP**
 
-Or with explicit options:
-```bash
-python/python.exe unity_mcp_server.py --mode stdio
-python/python.exe unity_mcp_server.py --mode sse --http-port 8080
-python/python.exe unity_mcp_server.py --ws-port 18712
-```
+<img src="docs/mcp-menu.png" alt="MCP Menu" width="500">
 
-## Server Modes
+## How It Works
 
-| Mode | Flag | Use Case |
-|------|------|----------|
-| **stdio** | `--mode stdio` (default) | Claude Desktop, Claude Code |
-| **SSE** | `--mode sse` | Network clients, web integrations |
+This package runs a **WebSocket server** inside the Unity Editor. When an AI agent sends a tool call, the Python MCP server forwards it over WebSocket to Unity, which executes it on the main thread and returns the result.
 
-## Command Line Options
+**Key components:**
 
-```
---mode stdio|sse       Server mode (default: stdio)
---ws-port PORT         Unity WebSocket port (default: auto-discover)
---http-port PORT       HTTP port for SSE mode (default: 8080)
---project-path PATH    Connect to specific Unity instance
-```
+- **McpWebSocketHandler** - WebSocket server (port 18711, auto-increments if busy)
+- **McpToolRegistry** - Discovers all `[McpTool]` methods via reflection at startup
+- **McpMainThreadDispatcher** - Bridges WebSocket threads to Unity's main thread
+- **McpEditorBridge** - Auto-starts the server when Unity opens (`[InitializeOnLoad]`)
+- **McpToolbarButton** - Status indicator with color-coded connection state
 
-## WebSocket Protocol
+## Built-in Tools
 
-The server communicates with Unity via WebSocket on port 18711.
+<img src="docs/mcp-tools.png" alt="MCP Tools Panel" width="400">
 
-### Discovery
-```json
-{"command": "__discover__"}
-// Response: {"tools": [...], "schema_version": "1.0.0"}
-```
+The package includes 60+ tools organized by category:
 
-### Tool Call
-```json
-{"command": "__call__", "tool": "sim_play", "arguments": {}}
-// Response: {"result": {"status": "playing"}}
-```
+| Category | Examples |
+|----------|----------|
+| **Simulation** | `sim_play`, `sim_stop`, `sim_pause`, `sim_status` |
+| **Scene** | `scene_hierarchy`, `scene_find`, `scene_get_info` |
+| **GameObjects** | `game_object_create`, `game_object_destroy`, `game_object_rename` |
+| **Components** | `component_get`, `component_set`, `component_add`, `component_remove` |
+| **Transforms** | `transform_set_position`, `transform_set_rotation`, `transform_set_scale` |
+| **Materials** | `material_set_color`, `material_get_color` |
+| **Physics** | `physics_add_rigidbody`, `physics_add_collider` |
+| **Prefabs** | `prefab_instantiate`, `prefab_find`, `prefab_open`, `prefab_save` |
+| **Editor** | `editor_recompile`, `editor_read_log`, `editor_save_scene`, `editor_wait_ready` |
+| **Screenshots** | `screenshot_editor`, `screenshot_game`, `screenshot_scene` |
 
-### Authentication
-```json
-{"command": "__auth__", "token": "..."}
-// Response: {"status": "ok"}
-```
+When used with the [realvirtual](https://assetstore.unity.com/packages/slug/311006) framework, additional tools are available:
 
-## Available Tools
+| Category | Examples |
+|----------|----------|
+| **Drives** | `drive_list`, `drive_to`, `drive_jog_forward`, `drive_stop` |
+| **Sensors** | `sensor_list`, `sensor_get`, `sensor_get_occupied` |
+| **Signals** | `signal_list`, `signal_set_bool`, `signal_set_int`, `signal_set_float` |
+| **IK** | `ik_get_state`, `ik_solve_target`, `ik_verify_fk` |
 
-The server auto-discovers all tools defined in Unity. Typical tools include:
+## Creating Custom Tools
 
-| Category | Examples | Description |
-|----------|----------|-------------|
-| **Simulation** | `sim_play`, `sim_stop`, `sim_status` | Control simulation lifecycle |
-| **Scene** | `scene_hierarchy`, `scene_find` | Navigate scene structure |
-| **GameObjects** | `game_object_create`, `game_object_destroy` | Create and manage objects |
-| **Components** | `component_get`, `component_set` | Read and modify components |
-| **Transforms** | `transform_set_position`, `transform_set_rotation` | Move and rotate objects |
-| **Editor** | `editor_recompile`, `editor_read_log` | Editor operations |
-| **Drives** | `drive_list`, `drive_to`, `drive_stop` | Control motion drives* |
-| **Sensors** | `sensor_list`, `sensor_get` | Read sensor states* |
-| **Signals** | `signal_list`, `signal_set_bool` | PLC signal I/O* |
-
-*Drive, Sensor, and Signal tools require the [realvirtual](https://assetstore.unity.com/packages/slug/311006) Unity package.
-
-## Creating Custom Tools (Unity Side)
-
-Add tools in any C# class:
+Add `[McpTool]` to any `public static string` method. Tools are discovered automatically via reflection - no registration needed.
 
 ```csharp
 using realvirtual.MCP;
@@ -162,70 +109,58 @@ public static class MyTools
 }
 ```
 
-Tools are discovered automatically via reflection. No registration needed.
+**Rules:**
+- Method must be `public static` and return `string` (JSON)
+- Tool names auto-convert from PascalCase to snake_case (`GetTime` -> `get_time`)
+- Use `[McpParam("description")]` on parameters for AI agent context
+- Optional parameters need default values
+- Use `ToolHelpers.FindGameObject()`, `ToolHelpers.Ok()`, `ToolHelpers.Error()` for common patterns
 
-## Unity Package
+## Toolbar Status
 
-The C# Unity side of this integration is available at:
+The toolbar brain icon shows connection state:
 
-- **Unity Asset Store**: [realvirtual MCP](https://assetstore.unity.com/packages/slug/311006)
-- **Git URL**: `https://github.com/realvirtual/unity-mcp.git`
+| Color | Meaning |
+|-------|---------|
+| Gray | Server stopped |
+| Yellow | Server running, no clients connected |
+| Green | Client(s) connected |
+| Orange | Unity compiling scripts |
 
-Install via Unity Package Manager > Add package from git URL.
-
-## Using with Your Own Python
-
-If you prefer your system Python instead of the embedded one:
-
-```bash
-pip install -r requirements.txt
-python unity_mcp_server.py --mode stdio
-```
-
-Requirements: Python 3.10+, `websockets>=12.0`, `mcp>=1.8.0`
+The activity label next to it shows the currently executing tool with elapsed time.
 
 ## Troubleshooting
 
-**Server can't connect to Unity**
-- Ensure Unity Editor is running with the MCP package installed
-- Check that port 18711 is not blocked by firewall
-- Verify the MCP WebSocket server is running (green icon in Unity toolbar)
+**Server not starting**
+- Check Unity Console for `[MCP]` log entries
+- Toggle debug mode via the gear popup for verbose logging
 
-**"python.exe blocked by antivirus"**
-- Add an exception for the embedded `python/python.exe` in your antivirus
-- Or use your system Python installation instead
+**Tools not discovered**
+- Ensure methods are `public static string` with `[McpTool]` attribute
+- Check for compile errors in Unity Console
+- Click "Refresh" in the toolbar popup
 
-**No tools discovered**
-- Check Unity Console for compile errors
-- Click "Refresh" in the Unity MCP toolbar popup
+**Timeouts during play mode**
+- Unity throttles editor updates in play mode - tool calls may be slower
+- Some operations (`component_set`) don't work during play mode
+
+## Python MCP Server
+
+The Python server that bridges MCP clients to this Unity package is maintained separately:
+
+**[github.com/game4automation/realvirtual-MCP](https://github.com/game4automation/realvirtual-MCP)**
+
+It ships with an embedded Python 3.12 runtime and can be downloaded directly from the Unity toolbar popup.
 
 ## License
 
-MIT License
+MIT License - Copyright (c) 2026 realvirtual GmbH
 
-Copyright (c) 2026 realvirtual GmbH
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+See [LICENSE.md](LICENSE.md) for full text.
 
 ## Links
 
 - Website: https://realvirtual.io
 - Documentation: https://doc.realvirtual.io
+- Python MCP Server: https://github.com/game4automation/realvirtual-MCP
 - Unity Asset Store: https://assetstore.unity.com/packages/slug/311006
-- Support: https://realvirtual.io/support
