@@ -1,0 +1,9 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vs/
+.idea/
+*.user
+*.suo

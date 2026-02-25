@@ -1,0 +1,23 @@
+{
+  "name": "io.realvirtual.mcp",
+  "version": "0.1.0",
+  "displayName": "realvirtual MCP Server",
+  "description": "MCP Server bridge for AI agent integration with realvirtual Digital Twins. Enables Unity simulation control through MCP protocol via WebSocket.",
+  "unity": "6000.0",
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
+  },
+  "keywords": [
+    "realvirtual",
+    "mcp",
+    "ai",
+    "agent",
+    "automation",
+    "digital-twin"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "realvirtual GmbH",
+    "url": "https://realvirtual.io"
+  }
+}

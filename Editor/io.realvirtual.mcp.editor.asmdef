@@ -1,0 +1,22 @@
+{
+    "name": "io.realvirtual.mcp.editor",
+    "rootNamespace": "realvirtual.MCP",
+    "references": [
+        "io.realvirtual.mcp"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Newtonsoft.Json.dll",
+        "System.IO.Compression.dll",
+        "System.IO.Compression.FileSystem.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -1,0 +1,21 @@
+{
+    "name": "io.realvirtual.mcp.tests",
+    "rootNamespace": "realvirtual.MCP.Tests",
+    "references": [
+        "io.realvirtual.mcp",
+        "realvirtual.featuretestframework"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Newtonsoft.Json.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "REALVIRTUAL_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

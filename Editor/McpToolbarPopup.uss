@@ -1,0 +1,219 @@
+/* MCP Toolbar Popup Stylesheet */
+
+/* Root */
+.popup-root {
+    flex-grow: 1;
+}
+
+/* ── Status Bar ─────────────────────────────────── */
+
+.status-bar-running {
+    background-color: rgba(76, 175, 80, 0.12);
+    padding: 10px 12px 8px 12px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(76, 175, 80, 0.3);
+}
+
+.status-bar-stopped {
+    background-color: rgba(158, 158, 158, 0.1);
+    padding: 10px 12px 8px 12px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(158, 158, 158, 0.3);
+}
+
+.status-row {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 5px;
+    margin-right: 8px;
+}
+
+.status-dot-running {
+    background-color: rgb(76, 175, 80);
+}
+
+.status-dot-stopped {
+    background-color: rgb(158, 158, 158);
+}
+
+.status-text {
+    font-size: 13px;
+    -unity-font-style: bold;
+}
+
+/* ── Info Chips ─────────────────────────────────── */
+
+.chips-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-top: 2px;
+}
+
+.info-chip {
+    font-size: 10px;
+    padding: 2px 8px;
+    margin-right: 6px;
+    margin-bottom: 4px;
+    border-radius: 8px;
+    background-color: rgba(128, 128, 128, 0.15);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.info-chip-connected {
+    font-size: 10px;
+    padding: 2px 8px;
+    margin-right: 6px;
+    margin-bottom: 4px;
+    border-radius: 8px;
+    background-color: rgba(76, 175, 80, 0.25);
+    color: rgb(76, 175, 80);
+}
+
+/* ── Tools Header ───────────────────────────────── */
+
+.tools-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 12px;
+    background-color: rgba(128, 128, 128, 0.06);
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(128, 128, 128, 0.15);
+}
+
+.tools-title {
+    font-size: 11px;
+    -unity-font-style: bold;
+    color: rgba(255, 255, 255, 0.6);
+    -unity-text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.refresh-btn {
+    font-size: 10px;
+    padding: 2px 10px;
+    border-radius: 3px;
+}
+
+/* ── Tool Scroll ────────────────────────────────── */
+
+.tool-scroll {
+    flex-grow: 1;
+}
+
+.empty-label {
+    padding: 16px;
+    -unity-font-style: italic;
+    color: rgba(255, 255, 255, 0.4);
+    -unity-text-align: middle-center;
+}
+
+/* ── Category Foldout ───────────────────────────── */
+
+.category-foldout {
+    margin: 0;
+    padding: 0;
+}
+
+.category-foldout > .unity-foldout__toggle {
+    padding: 4px 8px;
+    background-color: rgba(128, 128, 128, 0.08);
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(128, 128, 128, 0.12);
+}
+
+.category-foldout > .unity-foldout__toggle > .unity-foldout__text {
+    font-size: 10px;
+    -unity-font-style: bold;
+    color: rgba(255, 255, 255, 0.55);
+    letter-spacing: 0.5px;
+}
+
+.category-foldout > .unity-foldout__content {
+    margin-left: 0;
+    padding: 0;
+}
+
+/* ── Tool Card ──────────────────────────────────── */
+
+.tool-card {
+    padding: 6px 12px 6px 16px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(128, 128, 128, 0.1);
+}
+
+.tool-card:hover {
+    background-color: rgba(76, 175, 80, 0.06);
+}
+
+.tool-name {
+    font-size: 11px;
+    -unity-font-style: bold;
+    color: rgb(130, 190, 230);
+    margin-bottom: 1px;
+    cursor: link;
+}
+
+.tool-name:hover {
+    color: rgb(170, 215, 255);
+    -unity-font-style: bold-and-italic;
+}
+
+.tool-desc {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.55);
+    margin-bottom: 2px;
+    white-space: normal;
+}
+
+/* ── Parameters ─────────────────────────────────── */
+
+.params-container {
+    margin-top: 3px;
+    margin-left: 8px;
+    padding-left: 8px;
+    border-left-width: 2px;
+    border-left-color: rgba(128, 128, 128, 0.15);
+}
+
+.param-row {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 2px;
+}
+
+.param-name {
+    font-size: 10px;
+    -unity-font-style: bold;
+    color: rgba(255, 200, 120, 0.85);
+    margin-right: 6px;
+}
+
+.param-type {
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.35);
+    padding: 0px 4px;
+    border-radius: 2px;
+    background-color: rgba(128, 128, 128, 0.12);
+}
+
+.param-optional {
+    font-size: 9px;
+    -unity-font-style: italic;
+    color: rgba(255, 255, 255, 0.3);
+    margin-left: 6px;
+}
+
+.param-desc {
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.4);
+    margin-left: 4px;
+    margin-bottom: 2px;
+    white-space: normal;
+}
