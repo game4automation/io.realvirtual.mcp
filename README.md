@@ -1,6 +1,35 @@
 # realvirtual Unity MCP Package
 
-**Unity C# package that enables AI agents to control Unity Digital Twin simulations via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io).**
+**Give AI agents full control over your Unity Editor - scenes, GameObjects, components, simulation, and more.**
+
+This open-source Unity package implements a [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that lets AI agents like Claude, Cursor, or any MCP-compatible client interact with Unity in real time.
+
+### Why This MCP Server Is Different
+
+Most MCP servers for Unity require you to **edit Python code** every time you add a new tool. This one doesn't. You define tools entirely in C# with a simple attribute - the Python server discovers them automatically:
+
+```csharp
+[McpTool("Spawn an enemy at position")]
+public static string SpawnEnemy(
+    [McpParam("Prefab name")] string prefab,
+    [McpParam("X position")] float x,
+    [McpParam("Z position")] float z)
+{
+    // Your Unity code here - runs on main thread
+}
+```
+
+That's it. No Python changes, no server restart, no tool registration. Just recompile in Unity and the AI agent sees your new tool.
+
+**Key advantages:**
+- **Zero Python knowledge needed** - Define tools in C#, the language you're already using
+- **Auto-discovery** - Tools are found via reflection, no manual registration
+- **60+ built-in tools** - Scene, GameObjects, components, transforms, simulation, screenshots, prefabs, and more
+- **Extensible in minutes** - Add `[McpTool]` to any static method and it's available to AI agents
+- **Self-contained** - Ships with embedded Python 3.12, no system Python required
+- **One-click setup** - Download Python + configure Claude from the Unity toolbar
+- **Survives domain reloads** - Auto-reconnects after Unity recompiles scripts
+- **Multi-instance support** - Run multiple Unity instances, each with its own MCP server
 
 ```
 AI Agent (Claude Desktop / Claude Code / Cursor)
