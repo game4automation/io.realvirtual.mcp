@@ -22,6 +22,7 @@ public static string SpawnEnemy(
 That's it. No Python changes, no server restart, no tool registration. Just recompile in Unity and the AI agent sees your new tool.
 
 **Key advantages:**
+- **Works with any Unity project** - Not tied to a specific framework or asset. Install it in any project and start adding AI-controllable tools
 - **Zero Python knowledge needed** - Define tools in C#, the language you're already using
 - **Auto-discovery** - Tools are found via reflection, no manual registration
 - **60+ built-in tools** - Scene, GameObjects, components, transforms, simulation, screenshots, prefabs, and more
@@ -30,6 +31,17 @@ That's it. No Python changes, no server restart, no tool registration. Just reco
 - **One-click setup** - Download Python + configure Claude from the Unity toolbar
 - **Survives domain reloads** - Auto-reconnects after Unity recompiles scripts
 - **Multi-instance support** - Run multiple Unity instances, each with its own MCP server
+
+### Digital Twin Tools with realvirtual
+
+This MCP package works standalone with any Unity project. When combined with the [**realvirtual**](https://realvirtual.io) framework ([Unity Asset Store](https://assetstore.unity.com/packages/slug/311006)), you get additional MCP tools purpose-built for **industrial digital twins and virtual commissioning**:
+
+- **Drives** - Control motors, actuators, conveyors: `drive_to`, `drive_jog_forward`, `drive_stop`, `drive_set_speed`
+- **Sensors** - Read industrial sensors: `sensor_list`, `sensor_get`, `sensor_get_occupied`
+- **PLC Signals** - Read/write PLC I/O: `signal_set_bool`, `signal_set_int`, `signal_set_float`
+- **Robot IK** - Inverse kinematics control: `ik_get_state`, `ik_solve_target`, `ik_verify_fk`
+
+This enables AI agents to operate complete virtual factory simulations - move robots, control conveyors, read sensors, and interact with PLC programs in real time.
 
 ```
 AI Agent (Claude Desktop / Claude Code / Cursor)
