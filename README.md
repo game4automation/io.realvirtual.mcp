@@ -77,6 +77,7 @@ If no update button appears, remove the lock entry for `io.realvirtual.mcp` from
 
 - Unity 6000.0+
 - Newtonsoft JSON (`com.unity.nuget.newtonsoft-json`)
+- **git** must be installed and available in PATH (for Python server download/update) — [git-scm.com](https://git-scm.com)
 
 ## Setup
 
