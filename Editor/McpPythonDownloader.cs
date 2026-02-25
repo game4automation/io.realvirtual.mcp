@@ -36,12 +36,18 @@ namespace realvirtual.MCP
             return Path.Combine(GetPythonServerPath(), "python", "python.exe");
         }
 
-        //! Checks whether the Python server is deployed and the python.exe is valid (not an LFS pointer).
+        //! Checks whether the Python server is deployed and valid (not an LFS pointer).
         internal static bool IsDeployed()
         {
             var pythonExe = GetPythonExePath();
-            // Size check prevents LFS pointer false-positive (pointer files are ~130 bytes)
-            return File.Exists(pythonExe) && new FileInfo(pythonExe).Length > 1_000_000;
+            if (!File.Exists(pythonExe))
+                return false;
+
+            // Embedded Python uses a small launcher exe (~105KB) that loads python3XX.dll.
+            // Check the DLL exists and is large enough (not an LFS pointer ~130 bytes).
+            var pythonDir = Path.GetDirectoryName(pythonExe);
+            var dlls = Directory.GetFiles(pythonDir, "python3*.dll");
+            return dlls.Length > 0 && new FileInfo(dlls[0]).Length > 1_000_000;
         }
 
         static McpPythonDownloader()
