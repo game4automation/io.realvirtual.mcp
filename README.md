@@ -34,7 +34,7 @@ That's it. No Python changes, no server restart, no tool registration. Just reco
 
 ### Digital Twin Tools with realvirtual
 
-This MCP package works standalone with any Unity project. When combined with the [**realvirtual**](https://realvirtual.io) framework ([Unity Asset Store](https://assetstore.unity.com/packages/slug/311006)), you get additional MCP tools purpose-built for **industrial digital twins and virtual commissioning**:
+This MCP package works standalone with any Unity project. When combined with the [**realvirtual**](https://realvirtual.io) framework ([Unity Asset Store](https://assetstore.unity.com/packages/tools/integration/realvirtual-io-digital-twin-professional-6-301340)), you get additional MCP tools purpose-built for **industrial digital twins and virtual commissioning**:
 
 - **Drives** - Control motors, actuators, conveyors: `drive_to`, `drive_jog_forward`, `drive_stop`, `drive_set_speed`
 - **Sensors** - Read industrial sensors: `sensor_list`, `sensor_get`, `sensor_get_occupied`
@@ -149,7 +149,7 @@ The package includes 60+ tools organized by category:
 | **Editor** | `editor_recompile`, `editor_read_log`, `editor_save_scene`, `editor_wait_ready` |
 | **Screenshots** | `screenshot_editor`, `screenshot_game`, `screenshot_scene` |
 
-When used with the [realvirtual](https://assetstore.unity.com/packages/slug/311006) framework, additional tools are available:
+When used with the [realvirtual](https://assetstore.unity.com/packages/tools/integration/realvirtual-io-digital-twin-professional-6-301340) framework, additional tools are available:
 
 | Category | Examples |
 |----------|----------|
@@ -243,5 +243,6 @@ See [LICENSE.md](LICENSE.md) for full text.
 - Website: https://realvirtual.io
 - Documentation: https://doc.realvirtual.io/extensions/mcp-server
 - Python MCP Server: https://github.com/game4automation/realvirtual-MCP
-- Unity Asset Store (realvirtual): https://assetstore.unity.com/packages/slug/311006
 - Unity Asset Store (MCP Server): https://assetstore.unity.com/preview/361912/1260684
+- Unity Asset Store (Starter): https://assetstore.unity.com/packages/tools/integration/realvirtual-io-digital-twin-starter-6-303030
+- Unity Asset Store (Professional): https://assetstore.unity.com/packages/tools/integration/realvirtual-io-digital-twin-professional-6-301340
