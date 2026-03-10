@@ -88,7 +88,11 @@ namespace realvirtual.MCP
         {
             if (_iconImage == null) return;
 
-            if (EditorApplication.isCompiling)
+            bool isBusy = EditorApplication.isCompiling
+                || EditorApplication.isUpdating
+                || SessionState.GetBool(McpEditorBridge.SESSION_KEY_COMPILING, false);
+
+            if (isBusy)
             {
                 tooltip = "MCP Server: Compiling...";
                 _iconImage.tintColor = new Color(0.9f, 0.75f, 0.2f);
@@ -153,16 +157,24 @@ namespace realvirtual.MCP
             style.minWidth = 170;
             style.width = 170;
 
-            _label = new Label("Idle");
+            // Check SessionState immediately so the label shows "Compiling..." right
+            // after domain reload, before the first PollStatus tick even fires.
+            bool busyOnCreate = SessionState.GetBool(McpEditorBridge.SESSION_KEY_COMPILING, false)
+                || EditorApplication.isCompiling
+                || EditorApplication.isUpdating;
+
+            _label = new Label(busyOnCreate ? "Compiling\u2026" : "Idle");
             _label.style.fontSize = 11;
             _label.style.unityFontStyleAndWeight = FontStyle.Bold;
             _label.style.overflow = Overflow.Hidden;
             _label.style.unityTextAlign = TextAnchor.MiddleCenter;
-            _label.style.color = IDLE_COLOR;
+            _label.style.color = busyOnCreate ? COMPILING_COLOR : IDLE_COLOR;
             _label.style.paddingLeft = 0;
             _label.style.paddingRight = 0;
             _label.style.marginTop = 0;
             _label.style.marginBottom = 0;
+            if (busyOnCreate)
+                style.backgroundColor = new Color(0.25f, 0.22f, 0.14f, 0.9f);
             Add(_label);
 
             EditorApplication.update += PollStatus;
@@ -213,15 +225,16 @@ namespace realvirtual.MCP
                     break;
 
                 case McpToolCallTracker.CallState.Idle:
-                    if (EditorApplication.isCompiling)
+                    // Show "Compiling..." during any busy state: active compilation,
+                    // asset updating (which follows domain reload), or the SessionState
+                    // flag set before domain reload (survives the reload as safety net).
+                    bool isBusy = EditorApplication.isCompiling
+                        || EditorApplication.isUpdating
+                        || SessionState.GetBool(McpEditorBridge.SESSION_KEY_COMPILING, false);
+
+                    if (isBusy)
                     {
                         _label.text = "Compiling\u2026";
-                        _label.style.color = COMPILING_COLOR;
-                        style.backgroundColor = new Color(0.25f, 0.22f, 0.14f, 0.9f);
-                    }
-                    else if (EditorApplication.isUpdating)
-                    {
-                        _label.text = "Updating\u2026";
                         _label.style.color = COMPILING_COLOR;
                         style.backgroundColor = new Color(0.25f, 0.22f, 0.14f, 0.9f);
                     }

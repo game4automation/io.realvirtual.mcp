@@ -54,8 +54,10 @@ namespace realvirtual.MCP.Tools
             }
         }
 
-        //! Sets component properties from JSON
-        [McpTool("Set component properties")]
+        //! Sets component properties from JSON.
+        //! Supports Unity Object references (Component, GameObject, Material) by hierarchy path string.
+        //! Example: {"SignalPLCCycleCounter": "ctrlXInterface/iTick"} resolves the path to the component.
+        [McpTool("Set component properties. Supports setting Unity Object references (Component, GameObject, Material) by passing the hierarchy path as a string value, e.g. {\"MyDrive\": \"Robot/Axis1\"}")]
         public static string ComponentSet(
             [McpParam("GameObject hierarchy path (e.g. 'Robot/Rotobpath/PickPos'). Use full path to disambiguate objects with the same name.")] string name,
             [McpParam("Component type (e.g. 'Drive')")] string componentType,
@@ -188,6 +190,53 @@ namespace realvirtual.MCP.Tools
                 ["component"] = comp.GetType().Name,
                 ["path"] = ToolHelpers.GetGameObjectPath(go)
             });
+        }
+
+        //! Invokes a public method on a component by name.
+        //! Useful for triggering button actions, refresh calls, or any parameterless public method.
+        [McpTool("Invoke a public method on a component (e.g. click an inspector button)")]
+        public static string ComponentInvoke(
+            [McpParam("GameObject hierarchy path (e.g. 'ctrlXInterface')")] string name,
+            [McpParam("Component type (e.g. 'CtrlXInterface')")] string componentType,
+            [McpParam("Method name to invoke (e.g. 'RefreshStatus')")] string methodName)
+        {
+            var go = ToolHelpers.FindGameObject(name);
+            if (go == null)
+                return ToolHelpers.Error($"GameObject '{name}' not found");
+
+            var type = Serialization.McpTypeResolver.Resolve(componentType);
+            if (type == null)
+                return ToolHelpers.Error($"Type '{componentType}' not found");
+
+            var comp = go.GetComponent(type);
+            if (comp == null)
+                return ToolHelpers.Error($"No '{componentType}' found on '{name}'");
+
+            var method = type.GetMethod(methodName,
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance,
+                null, System.Type.EmptyTypes, null);
+
+            if (method == null)
+                return ToolHelpers.Error($"Public parameterless method '{methodName}' not found on '{componentType}'");
+
+            try
+            {
+                var result = method.Invoke(comp, null);
+                SelectInHierarchy(go);
+
+                return ToolHelpers.Ok(new JObject
+                {
+                    ["gameObject"] = go.name,
+                    ["path"] = ToolHelpers.GetGameObjectPath(go),
+                    ["component"] = componentType,
+                    ["method"] = methodName,
+                    ["returned"] = result?.ToString() ?? "void"
+                });
+            }
+            catch (System.Exception ex)
+            {
+                return ToolHelpers.Error($"Method invocation failed: {ex.InnerException?.Message ?? ex.Message}");
+            }
         }
 
         //! Removes a component from a GameObject by type name

@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using UnityEditor;
+using UnityEditor.Compilation;
 using UnityEngine;
 
 namespace realvirtual.MCP
@@ -24,6 +25,7 @@ namespace realvirtual.MCP
     internal static class McpEditorBridge
     {
         private static McpToolRegistry _registry;
+        private static McpResourceRegistry _resourceRegistry;
         private static McpWebSocketHandler _handler;
         private static string _authToken;
         private static bool _isRunning;
@@ -165,7 +167,30 @@ namespace realvirtual.MCP
             // fire reliably when Unity is not in the foreground (MCP calls come from background).
             McpLog.Debug("EditorBridge: Static constructor (domain reload or first load)");
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
+            CompilationPipeline.compilationStarted += OnCompilationStarted;
+            CompilationPipeline.compilationFinished += OnCompilationFinished;
             EditorApplication.update += InitializeDeferred;
+
+            // If we're coming back from a domain reload with the compiling flag set,
+            // hold it for a minimum time so the overlay can reconstruct and display it.
+            if (SessionState.GetBool(SESSION_KEY_COMPILING, false))
+            {
+                _compilingFlagHoldUntil = EditorApplication.timeSinceStartup + COMPILING_FLAG_MIN_HOLD;
+            }
+        }
+
+        //! Forces immediate repaint when compilation starts so toolbar shows "Compiling..."
+        private static void OnCompilationStarted(object context)
+        {
+            McpLog.Debug("EditorBridge: Compilation started - forcing toolbar repaint");
+            SceneView.RepaintAll();
+        }
+
+        //! Forces immediate repaint when compilation finishes so toolbar updates from "Compiling..."
+        private static void OnCompilationFinished(object context)
+        {
+            McpLog.Debug("EditorBridge: Compilation finished - forcing toolbar repaint");
+            SceneView.RepaintAll();
         }
 
         private static void InitializeDeferred()
@@ -174,12 +199,22 @@ namespace realvirtual.MCP
             Initialize();
         }
 
+        //! SessionState key used to persist "compiling/reloading" state across domain reloads.
+        //! Overlays are destroyed during domain reload, so without this flag the toolbar
+        //! cannot show "Compiling..." because isCompiling is already false when the overlay
+        //! is reconstructed in the new domain.
+        internal const string SESSION_KEY_COMPILING = "McpToolbar_IsCompiling";
+
         //! Clean shutdown before domain reload so Python receives a close frame
         //! and the port is released before the new server starts.
         private static void OnBeforeAssemblyReload()
         {
             McpLog.Debug("EditorBridge: Domain reload imminent - stopping server cleanly");
             McpWebSocketHandler.IsReloading = true;
+
+            // Persist compiling state across domain reload so the toolbar overlay
+            // can show "Compiling..." after reconstruction in the new domain.
+            SessionState.SetBool(SESSION_KEY_COMPILING, true);
 
             // Write reloading state so Python server knows to wait
             var port = _handler?.ActualPort ?? DEFAULT_PORT;
@@ -205,6 +240,9 @@ namespace realvirtual.MCP
 
             // Clear reload flag now that we're back on the main thread
             McpWebSocketHandler.IsReloading = false;
+
+            // Keep SESSION_KEY_COMPILING set during initialization - it will be cleared
+            // by OnEditorUpdate once isCompiling and isUpdating are both false.
 
             // Sync debug mode from persisted preference
             McpWebSocketHandler.DebugMode = EditorPrefs.GetBool(DEBUG_MODE_PREF, false);
@@ -239,6 +277,15 @@ namespace realvirtual.MCP
                 // Discover tools
                 _registry = new McpToolRegistry();
                 _registry.DiscoverTools();
+
+                // Discover usage guides (*.mcp.md files)
+                _resourceRegistry = new McpResourceRegistry();
+                _resourceRegistry.DiscoverGuides();
+                if (_resourceRegistry.GuideCount > 0)
+                {
+                    _registry.SetInstructions(_resourceRegistry.GetCombinedGuide());
+                    McpLog.Debug($"EditorBridge: Loaded {_resourceRegistry.GuideCount} MCP guide(s)");
+                }
 
                 // Generate auth token
                 _authToken = Guid.NewGuid().ToString();
@@ -284,6 +331,11 @@ namespace realvirtual.MCP
 
         private static void Shutdown() => StopServer();
 
+        //! Minimum time (seconds) to hold the compiling flag after domain reload.
+        //! Prevents the flag from being cleared before the overlay reconstructs and renders.
+        private const double COMPILING_FLAG_MIN_HOLD = 2.0;
+        private static double _compilingFlagHoldUntil;
+
         //! Interval in seconds between discovery file heartbeat updates
         private const double HEARTBEAT_INTERVAL = 5.0;
         private static double _lastHeartbeatTime;
@@ -309,12 +361,27 @@ namespace realvirtual.MCP
                     McpInstanceDiscovery.UpdateHeartbeat(_handler.ActualPort);
                 }
 
-                // Force UI update when tool call state changes or a call is in progress.
+                // Clear the "was compiling" flag once Unity is fully settled after domain reload
+                // AND the minimum hold time has elapsed (so the overlay has time to display it).
+                if (SessionState.GetBool(SESSION_KEY_COMPILING, false)
+                    && !EditorApplication.isCompiling
+                    && !EditorApplication.isUpdating
+                    && EditorApplication.timeSinceStartup >= _compilingFlagHoldUntil)
+                {
+                    SessionState.SetBool(SESSION_KEY_COMPILING, false);
+                    McpLog.Debug("EditorBridge: Compilation/reload complete - clearing toolbar flag");
+                }
+
+                // Force UI update when tool call state changes, a call is in progress,
+                // or Unity is compiling/updating (so the toolbar shows "Compiling..." / "Updating...").
                 // Without this, the toolbar overlay only updates at the (slow) unfocused
-                // EditorApplication.update rate, so the user misses "Executing" / "Done" states.
+                // EditorApplication.update rate, so the user misses status changes.
                 bool needsRepaint = McpToolCallTracker.ConsumeIsDirty()
-                    || McpToolCallTracker.State == McpToolCallTracker.CallState.Executing;
-                if (needsRepaint && !EditorApplication.isCompiling && !EditorApplication.isUpdating)
+                    || McpToolCallTracker.State == McpToolCallTracker.CallState.Executing
+                    || EditorApplication.isCompiling
+                    || EditorApplication.isUpdating
+                    || SessionState.GetBool(SESSION_KEY_COMPILING, false);
+                if (needsRepaint)
                 {
                     SceneView.RepaintAll();
                     EditorApplication.RepaintHierarchyWindow();

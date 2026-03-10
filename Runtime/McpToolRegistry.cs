@@ -29,6 +29,7 @@ namespace realvirtual.MCP
     {
         private readonly Dictionary<string, ToolEntry> _tools = new Dictionary<string, ToolEntry>();
         private bool _initialized = false;
+        private string _instructions;
 
         //! Gets the number of registered tools
         public int ToolCount => _tools.Count;
@@ -261,7 +262,14 @@ namespace realvirtual.MCP
                 .Replace("\t", "\\t");
         }
 
-        //! Gets JSON array of all tool schemas
+        //! Sets the MCP instructions content (from discovered *.mcp.md files).
+        //! Included in the __discover__ response so AI clients receive usage conventions.
+        public void SetInstructions(string instructions)
+        {
+            _instructions = instructions;
+        }
+
+        //! Gets JSON array of all tool schemas, optionally including instructions
         public string GetToolSchemas()
         {
             var sb = new StringBuilder();
@@ -281,7 +289,14 @@ namespace realvirtual.MCP
                 sb.Append("}");
             }
 
-            sb.Append($"],\"schema_version\":\"{McpVersion.Version}\"}}");
+            sb.Append("]");
+
+            if (!string.IsNullOrEmpty(_instructions))
+            {
+                sb.Append($",\"instructions\":\"{EscapeJson(_instructions)}\"");
+            }
+
+            sb.Append($",\"schema_version\":\"{McpVersion.Version}\"}}");
             return sb.ToString();
         }
 

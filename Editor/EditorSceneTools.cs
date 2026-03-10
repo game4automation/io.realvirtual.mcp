@@ -19,19 +19,38 @@ namespace realvirtual.MCP.Tools
     //! in the Unity Editor. These tools are Editor-only (excluded from builds by assembly definition).
     public static class EditorSceneTools
     {
-        //! Saves the current scene
+        //! Saves the current scene. If path is provided, saves as a new scene file (Save As).
         [McpTool("Save current scene")]
-        public static string EditorSaveScene()
+        public static string EditorSaveScene(
+            [McpParam("Optional: asset path to save as (e.g. 'Assets/Scenes/MyScene.unity'). If empty, saves to current path.")] string path = "")
         {
             var scene = SceneManager.GetActiveScene();
-            bool saved = EditorSceneManager.SaveScene(scene);
+
+            bool saved;
+            if (!string.IsNullOrEmpty(path))
+            {
+                if (!path.EndsWith(".unity"))
+                    path += ".unity";
+
+                // Ensure directory exists
+                var dir = System.IO.Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(dir) && !System.IO.Directory.Exists(dir))
+                    System.IO.Directory.CreateDirectory(dir);
+
+                saved = EditorSceneManager.SaveScene(scene, path);
+            }
+            else
+            {
+                saved = EditorSceneManager.SaveScene(scene);
+            }
 
             if (saved)
             {
+                scene = SceneManager.GetActiveScene();
                 return new JObject
                 {
                     ["status"] = "ok",
-                    ["message"] = "Scene saved",
+                    ["message"] = string.IsNullOrEmpty(path) ? "Scene saved" : $"Scene saved as '{path}'",
                     ["scenePath"] = scene.path
                 }.ToString(Newtonsoft.Json.Formatting.None);
             }
@@ -186,6 +205,83 @@ namespace realvirtual.MCP.Tools
                 var inner = ex.InnerException ?? ex;
                 return ToolHelpers.Error($"Method execution failed: {inner.Message}");
             }
+        }
+
+        //! Gets the current scene camera position, rotation, pivot and size
+        [McpTool("Get scene camera view", "editor_get_camera")]
+        public static string EditorGetCamera()
+        {
+            var sv = SceneView.lastActiveSceneView;
+            if (sv == null)
+                return ToolHelpers.Error("No active SceneView found");
+
+            var pos = sv.camera.transform.position;
+            var rot = sv.camera.transform.rotation.eulerAngles;
+            var pivot = sv.pivot;
+            var pivotRot = sv.rotation.eulerAngles;
+
+            return new JObject
+            {
+                ["status"] = "ok",
+                ["position"] = new JObject { ["x"] = pos.x, ["y"] = pos.y, ["z"] = pos.z },
+                ["rotation"] = new JObject { ["x"] = rot.x, ["y"] = rot.y, ["z"] = rot.z },
+                ["pivot"] = new JObject { ["x"] = pivot.x, ["y"] = pivot.y, ["z"] = pivot.z },
+                ["pivotRotation"] = new JObject { ["x"] = pivotRot.x, ["y"] = pivotRot.y, ["z"] = pivotRot.z },
+                ["size"] = sv.size,
+                ["orthographic"] = sv.orthographic
+            }.ToString(Newtonsoft.Json.Formatting.None);
+        }
+
+        //! Sets the scene camera view by pivot, rotation and size
+        [McpTool("Set scene camera view", "editor_set_camera")]
+        public static string EditorSetCamera(
+            [McpParam("Pivot X position")] float pivotX = float.NaN,
+            [McpParam("Pivot Y position")] float pivotY = float.NaN,
+            [McpParam("Pivot Z position")] float pivotZ = float.NaN,
+            [McpParam("Rotation X (pitch in degrees)")] float rotationX = float.NaN,
+            [McpParam("Rotation Y (yaw in degrees)")] float rotationY = float.NaN,
+            [McpParam("Rotation Z (roll in degrees)")] float rotationZ = float.NaN,
+            [McpParam("Camera zoom size")] float size = float.NaN,
+            [McpParam("Orthographic view")] bool orthographic = false)
+        {
+            var sv = SceneView.lastActiveSceneView;
+            if (sv == null)
+                return ToolHelpers.Error("No active SceneView found");
+
+            if (!float.IsNaN(pivotX) || !float.IsNaN(pivotY) || !float.IsNaN(pivotZ))
+            {
+                var pivot = sv.pivot;
+                if (!float.IsNaN(pivotX)) pivot.x = pivotX;
+                if (!float.IsNaN(pivotY)) pivot.y = pivotY;
+                if (!float.IsNaN(pivotZ)) pivot.z = pivotZ;
+                sv.pivot = pivot;
+            }
+
+            if (!float.IsNaN(rotationX) || !float.IsNaN(rotationY) || !float.IsNaN(rotationZ))
+            {
+                var euler = sv.rotation.eulerAngles;
+                if (!float.IsNaN(rotationX)) euler.x = rotationX;
+                if (!float.IsNaN(rotationY)) euler.y = rotationY;
+                if (!float.IsNaN(rotationZ)) euler.z = rotationZ;
+                sv.rotation = Quaternion.Euler(euler);
+            }
+
+            if (!float.IsNaN(size))
+                sv.size = size;
+
+            sv.orthographic = orthographic;
+            sv.Repaint();
+
+            var newPivot = sv.pivot;
+            var newRot = sv.rotation.eulerAngles;
+            return new JObject
+            {
+                ["status"] = "ok",
+                ["pivot"] = new JObject { ["x"] = newPivot.x, ["y"] = newPivot.y, ["z"] = newPivot.z },
+                ["pivotRotation"] = new JObject { ["x"] = newRot.x, ["y"] = newRot.y, ["z"] = newRot.z },
+                ["size"] = sv.size,
+                ["orthographic"] = sv.orthographic
+            }.ToString(Newtonsoft.Json.Formatting.None);
         }
     }
 }
