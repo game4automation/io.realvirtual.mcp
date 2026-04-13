@@ -79,6 +79,7 @@ namespace realvirtual.MCP
                 try
                 {
                     _wss = new WebSocketServer($"ws://127.0.0.1:{tryPort}");
+                    _wss.ReuseAddress = true;
                     _wss.AddWebSocketService<McpClientBehavior>("/mcp");
                     _wss.Start();
                     _actualPort = tryPort;
