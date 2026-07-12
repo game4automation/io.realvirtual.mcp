@@ -70,17 +70,33 @@ namespace realvirtual.MCP.Tools
             try
             {
                 var data = JObject.Parse(properties);
-                var errors = ComponentDeserializer.Deserialize(go, componentType, data);
+                var applied = new System.Collections.Generic.List<string>();
+                var errors = ComponentDeserializer.Deserialize(go, componentType, data, applied);
                 SelectInHierarchy(go);
 
+                var appliedArr = new JArray();
+                foreach (var f in applied)
+                    appliedArr.Add(f);
+
+                // Any error means at least one field did NOT apply. Report it as an error so the
+                // agent never sees "ok" while a field stayed untouched - but still say which
+                // fields did apply, so a partial write is visible instead of ambiguous.
                 if (errors.Count > 0)
-                    return ToolHelpers.Error(string.Join("; ", errors));
+                    return ToolHelpers.Error(string.Join("; ", errors), new JObject
+                    {
+                        ["path"] = ToolHelpers.GetGameObjectPath(go),
+                        ["component"] = componentType,
+                        ["applied"] = appliedArr,
+                        ["fieldsSet"] = applied.Count
+                    });
 
                 return ToolHelpers.Ok(new JObject
                 {
                     ["gameObject"] = go.name,
                     ["path"] = ToolHelpers.GetGameObjectPath(go),
-                    ["component"] = componentType
+                    ["component"] = componentType,
+                    ["applied"] = appliedArr,
+                    ["fieldsSet"] = applied.Count
                 });
             }
             catch (JsonReaderException ex)

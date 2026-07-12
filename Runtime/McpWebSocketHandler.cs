@@ -297,7 +297,10 @@ namespace realvirtual.MCP
             }, "__discover__");
         }
 
-        //! Handles __call__ command by dispatching tool execution to main thread
+        //! Handles __call__ command by dispatching tool execution to main thread.
+        //! Tool execution runs in an InvariantCulture scope so tools that build JSON
+        //! manually via string interpolation ($"{x:F4}") never emit decimal commas
+        //! on non-English systems (de-DE produced invalid JSON like [0,0000,0,2399]).
         private string HandleCall(string toolName, Dictionary<string, object> arguments)
         {
             McpToolCallTracker.OnCallStarted(toolName);
@@ -305,8 +308,17 @@ namespace realvirtual.MCP
             var result = DispatchToMainThread(() =>
             {
                 McpLog.Debug($"WS: Executing on main thread: {toolName}");
-                var toolResult = _registry.CallTool(toolName, arguments);
-                return $"{{\"result\":{toolResult}}}";
+                var previousCulture = Thread.CurrentThread.CurrentCulture;
+                Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+                try
+                {
+                    var toolResult = _registry.CallTool(toolName, arguments);
+                    return $"{{\"result\":{toolResult}}}";
+                }
+                finally
+                {
+                    Thread.CurrentThread.CurrentCulture = previousCulture;
+                }
             }, toolName);
 
             var success = result != null && !result.Contains("\"error\"");
@@ -329,10 +341,16 @@ namespace realvirtual.MCP
             return "{\"error\":\"invalid token\"}";
         }
 
-        //! Handles __heartbeat__ command
+        //! Handles __heartbeat__ command.
+        //! Includes main thread pump inactivity so the Python sidecar can report an honest
+        //! editor status: the heartbeat itself is answered on a background thread and
+        //! succeeds even while the Unity main thread is completely frozen.
+        //! main_thread_inactive_s is -1 if the pump has never run (startup).
         private string HandleHeartbeat()
         {
-            return $"{{\"status\":\"ok\",\"tools_count\":{_registry.ToolCount}}}";
+            var inactive = McpMainThreadDispatcher.SecondsSinceLastPump;
+            var inactiveJson = inactive.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+            return $"{{\"status\":\"ok\",\"tools_count\":{_registry.ToolCount},\"main_thread_inactive_s\":{inactiveJson}}}";
         }
 
         //! Parses arguments object from a parsed JObject message.

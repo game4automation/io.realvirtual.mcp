@@ -25,7 +25,12 @@ namespace realvirtual.MCP.Serialization
         //! Applies JSON to a MonoBehaviour (partial update - only fields present in JSON).
         //! Registers Undo and marks the object as dirty so changes persist on scene save.
         //! Returns a list of errors for fields that could not be set (empty if all succeeded).
-        public static List<string> Deserialize(MonoBehaviour component, JObject data)
+        //!
+        //! Write-verify contract: every key in the JSON must map to a writable field and
+        //! actually be applied. Unknown keys, unresolved references, and type mismatches are
+        //! reported as errors instead of being silently ignored. Field names that were
+        //! successfully written are collected in <paramref name="appliedFields"/> (if provided).
+        public static List<string> Deserialize(MonoBehaviour component, JObject data, List<string> appliedFields = null)
         {
             var errors = new List<string>();
 
@@ -51,25 +56,59 @@ namespace realvirtual.MCP.Serialization
             var reflData = ReflectionCache.GetReflectionData(type);
             bool anyFieldSet = false;
 
-            // Deserialize each field present in JSON
-            foreach (var field in reflData.SerializableFields)
+            // Build a case-insensitive lookup so casing slips (e.g. "targetspeed") resolve
+            // to the real field instead of failing as "unknown field".
+            var fieldByName = new Dictionary<string, CachedFieldInfo>(StringComparer.OrdinalIgnoreCase);
+            foreach (var f in reflData.SerializableFields)
+                fieldByName[f.Name] = f; // last write wins; exact-case handled below
+
+            // Iterate over the JSON keys (NOT the field list) so unknown keys become errors
+            // instead of being silently dropped. This is the core "never fail silently" rule.
+            foreach (var property in data.Properties())
             {
-                // Skip fields not present in JSON (partial update)
-                if (!data.ContainsKey(field.Name))
+                var key = property.Name;
+                var token = property.Value;
+
+                // Skip serializer metadata keys (e.g. "_truncated") so round-tripping a
+                // component_get payload back into component_set never trips the unknown-field check.
+                if (key.Length > 0 && key[0] == '_')
+                    continue;
+
+                // Resolve the field: exact match first, then case-insensitive fallback.
+                CachedFieldInfo field = null;
+                foreach (var f in reflData.SerializableFields)
+                {
+                    if (f.Name == key) { field = f; break; }
+                }
+                if (field == null)
+                    fieldByName.TryGetValue(key, out field);
+
+                if (field == null)
+                {
+                    errors.Add($"Unknown field '{key}' on {type.Name}. {SuggestFields(key, reflData)}");
+                    continue;
+                }
+
+                // A null JSON token means "leave this field unchanged" (partial update).
+                if (token == null || token.Type == JTokenType.Null)
                     continue;
 
                 try
                 {
-                    var token = data[field.Name];
-                    if (token == null || token.Type == JTokenType.Null)
-                        continue;
-
                     var value = DeserializeValue(token, field.Category, field.FieldType, field.ElementType);
-                    if (value != null)
+                    if (value == null)
                     {
-                        field.SetValue(component, value);
-                        anyFieldSet = true;
+                        // Non-null token that could not be turned into a value: unresolved
+                        // reference, wrong JSON shape, or unsupported field type. Report it -
+                        // do NOT return status ok while the field stayed untouched.
+                        errors.Add($"Field '{field.Name}' ({FriendlyType(field)}): could not apply value {Summarize(token)} - " +
+                                   "reference not found, wrong shape, or unsupported type.");
+                        continue;
                     }
+
+                    field.SetValue(component, value);
+                    anyFieldSet = true;
+                    appliedFields?.Add(field.Name);
                 }
                 catch (Exception ex)
                 {
@@ -87,11 +126,56 @@ namespace realvirtual.MCP.Serialization
             return errors;
         }
 
+        //! Builds a helpful "did you mean" hint listing close / available field names.
+        private static string SuggestFields(string key, ComponentReflectionData reflData)
+        {
+            var near = new List<string>();
+            foreach (var f in reflData.SerializableFields)
+            {
+                if (f.Name.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    key.IndexOf(f.Name, StringComparison.OrdinalIgnoreCase) >= 0)
+                    near.Add(f.Name);
+            }
+
+            if (near.Count > 0)
+                return $"Did you mean: {string.Join(", ", near)}?";
+
+            var all = new List<string>();
+            foreach (var f in reflData.SerializableFields)
+                all.Add(f.Name);
+            if (all.Count == 0)
+                return "This component has no settable fields.";
+
+            const int max = 25;
+            if (all.Count > max)
+                return $"Valid fields include: {string.Join(", ", all.GetRange(0, max))}, ... ({all.Count} total).";
+            return $"Valid fields: {string.Join(", ", all)}.";
+        }
+
+        //! Short human-readable type name for a field, used in error messages.
+        private static string FriendlyType(CachedFieldInfo field)
+        {
+            var t = field.FieldType;
+            if (t.IsGenericType)
+                return t.Name.Substring(0, t.Name.IndexOf('`')) + "<" +
+                       (field.ElementType != null ? field.ElementType.Name : "?") + ">";
+            return t.Name;
+        }
+
+        //! Truncates a JSON token to a short single-line summary for error messages.
+        private static string Summarize(JToken token)
+        {
+            var s = token.ToString(Formatting.None);
+            if (s.Length > 80)
+                s = s.Substring(0, 77) + "...";
+            return s;
+        }
+
         //! Applies JSON to a named component type on a GameObject.
         //! Supports indexed component names like "Drive_1" to target specific instances
         //! when multiple components of the same type exist on a GameObject.
         //! Returns a list of errors (empty if all succeeded).
-        public static List<string> Deserialize(GameObject go, string componentTypeName, JObject data)
+        public static List<string> Deserialize(GameObject go, string componentTypeName, JObject data, List<string> appliedFields = null)
         {
             if (go == null)
                 return new List<string> { "GameObject is null" };
@@ -115,7 +199,7 @@ namespace realvirtual.MCP.Serialization
             if (comp == null)
                 return new List<string> { $"Component '{componentTypeName}' (index {componentIndex}) not found on '{go.name}'" };
 
-            return Deserialize(comp, data);
+            return Deserialize(comp, data, appliedFields);
         }
 
         //! Gets a component at a specific index when multiple of the same type exist.
@@ -241,7 +325,7 @@ namespace realvirtual.MCP.Serialization
 
                 case FieldCategory.PrimitiveArray:
                 case FieldCategory.UnityPrimitiveArray:
-                    return DeserializeArray(token, category, elementType);
+                    return DeserializeArray(token, category, fieldType, elementType);
 
                 case FieldCategory.ObjectArray:
                     return DeserializeObjectArray(token, elementType);
@@ -265,6 +349,9 @@ namespace realvirtual.MCP.Serialization
 
                 case FieldCategory.Serializable:
                     return DeserializeSerializable(token, fieldType);
+
+                case FieldCategory.SerializableList:
+                    return DeserializeSerializableList(token, fieldType, elementType);
 
                 default:
                     return null;
@@ -405,7 +492,11 @@ namespace realvirtual.MCP.Serialization
             return null;
         }
 
-        private static object DeserializeArray(JToken token, FieldCategory category, Type elementType)
+        //! Deserializes a JSON array into either a T[] or a List&lt;T&gt;, matching the target
+        //! field type. This is what makes primitive List fields (e.g. List&lt;string&gt; like
+        //! Sensor.AdditionalRayCastLayers) settable - previously a plain array was always built,
+        //! which threw a type mismatch when assigned to a List field.
+        private static object DeserializeArray(JToken token, FieldCategory category, Type fieldType, Type elementType)
         {
             if (token.Type != JTokenType.Array)
                 return null;
@@ -414,48 +505,24 @@ namespace realvirtual.MCP.Serialization
 
             try
             {
-                if (category == FieldCategory.PrimitiveArray)
+                var list = new ArrayList();
+                foreach (var item in jArray)
                 {
-                    var list = new ArrayList();
-                    foreach (var item in jArray)
+                    if (item.Type == JTokenType.Null)
                     {
-                        if (item.Type == JTokenType.Null)
-                        {
-                            list.Add(null);
-                        }
-                        else
-                        {
-                            var value = DeserializePrimitive(item, elementType);
-                            list.Add(value);
-                        }
+                        list.Add(null);
                     }
-
-                    // Convert to typed array
-                    var array = Array.CreateInstance(elementType, list.Count);
-                    list.CopyTo(array);
-                    return array;
-                }
-                else if (category == FieldCategory.UnityPrimitiveArray)
-                {
-                    var list = new ArrayList();
-                    foreach (var item in jArray)
+                    else if (category == FieldCategory.PrimitiveArray)
                     {
-                        if (item.Type == JTokenType.Null)
-                        {
-                            list.Add(null);
-                        }
-                        else
-                        {
-                            var value = DeserializeUnityPrimitive(item, elementType);
-                            list.Add(value);
-                        }
+                        list.Add(DeserializePrimitive(item, elementType));
                     }
-
-                    // Convert to typed array
-                    var array = Array.CreateInstance(elementType, list.Count);
-                    list.CopyTo(array);
-                    return array;
+                    else // UnityPrimitiveArray
+                    {
+                        list.Add(DeserializeUnityPrimitive(item, elementType));
+                    }
                 }
+
+                return BuildTypedCollection(fieldType, elementType, list);
             }
             catch (Exception ex)
             {
@@ -463,6 +530,25 @@ namespace realvirtual.MCP.Serialization
             }
 
             return null;
+        }
+
+        //! Materializes the collected items as the concrete field type: List&lt;T&gt; when the
+        //! field is a generic list, otherwise a T[] array. Keeps array and list fields both working.
+        private static object BuildTypedCollection(Type fieldType, Type elementType, ArrayList items)
+        {
+            if (fieldType != null && fieldType.IsGenericType &&
+                fieldType.GetGenericTypeDefinition() == typeof(List<>))
+            {
+                var listType = typeof(List<>).MakeGenericType(elementType);
+                var typedList = (IList)Activator.CreateInstance(listType);
+                foreach (var item in items)
+                    typedList.Add(item);
+                return typedList;
+            }
+
+            var array = Array.CreateInstance(elementType, items.Count);
+            items.CopyTo(array);
+            return array;
         }
 
         private static object DeserializeSerializable(JToken token, Type fieldType)
@@ -478,6 +564,44 @@ namespace realvirtual.MCP.Serialization
             catch (Exception ex)
             {
                 McpLog.Warn($"Deserializer: Failed to deserialize [Serializable] object {fieldType.Name}: {ex.Message}");
+                return null;
+            }
+        }
+
+        private static object DeserializeSerializableList(JToken token, Type fieldType, Type elementType)
+        {
+            if (token.Type != JTokenType.Array)
+                return null;
+
+            var jArray = (JArray)token;
+
+            try
+            {
+                var serializer = JsonSerializer.Create(_jsonSettings);
+
+                // Handle arrays (e.g. CollisionGroupEntry[])
+                if (fieldType.IsArray)
+                {
+                    var array = Array.CreateInstance(elementType, jArray.Count);
+                    for (int i = 0; i < jArray.Count; i++)
+                    {
+                        array.SetValue(jArray[i].ToObject(elementType, serializer), i);
+                    }
+                    return array;
+                }
+
+                // Handle List<T> (e.g. List<CollisionGroupEntry>)
+                var listType = typeof(List<>).MakeGenericType(elementType);
+                var list = (IList)Activator.CreateInstance(listType);
+                for (int i = 0; i < jArray.Count; i++)
+                {
+                    list.Add(jArray[i].ToObject(elementType, serializer));
+                }
+                return list;
+            }
+            catch (Exception ex)
+            {
+                McpLog.Warn($"Deserializer: Failed to deserialize list/array of {elementType.Name}: {ex.Message}");
                 return null;
             }
         }

@@ -248,23 +248,79 @@ namespace realvirtual.MCP.Tools
             return CaptureCamera(camera, cameraLabel, width, height, format, quality, "game");
         }
 
-        //! Captures the Scene View camera and returns as base64 image
+        //! Captures the Scene View camera and returns as base64 image.
+        //!
+        //! By default this renders the Scene View camera into an offscreen RenderTexture, which does
+        //! NOT include Editor Gizmos/Handles (e.g. debug_marker "axes"/"cross" overlays) - Gizmos are
+        //! drawn by the Scene View's own IMGUI pass, not as part of a camera's normal render. Set
+        //! includeGizmos=true to instead capture the Scene View window's actual on-screen pixels
+        //! (same mechanism as screenshot_editor(panel:"scene")), which DOES include Gizmos/Handles.
         [McpTool("Capture scene view screenshot")]
         public static string ScreenshotScene(
             [McpParam("Width in pixels")] int width = 1024,
             [McpParam("Height in pixels")] int height = 768,
             [McpParam("Image format: png or jpg")] string format = "png",
-            [McpParam("JPG quality 1-100")] int quality = 85)
+            [McpParam("JPG quality 1-100")] int quality = 85,
+            [McpParam("Capture via screen-pixels instead of RenderTexture, so Editor Gizmos/Handles (e.g. debug_marker overlays) are included. Default false = unchanged RenderTexture behavior.")] bool includeGizmos = false)
         {
             var sceneView = SceneView.lastActiveSceneView;
             if (sceneView == null)
                 return ToolHelpers.Error("No active Scene View found. Open a Scene View in the Editor.");
+
+            if (includeGizmos)
+                return CapturePanelScreenPixelsAsTool("scene", "scene");
 
             var camera = sceneView.camera;
             if (camera == null)
                 return ToolHelpers.Error("Scene View camera is not available.");
 
             return CaptureCamera(camera, "SceneView", width, height, format, quality, "scene");
+        }
+
+        //! Shared screen-pixel capture path used by ScreenshotEditor(panel) and
+        //! ScreenshotScene(includeGizmos:true). Captures the real on-screen pixels of an Editor panel,
+        //! which includes anything drawn via Handles/Gizmos (unlike a camera.Render() RenderTexture).
+        private static string CapturePanelScreenPixelsAsTool(string panel, string panelNameForResponse)
+        {
+            try
+            {
+                var captureRect = GetPanelRect(panel, out var panelName);
+                if (captureRect.width <= 0 || captureRect.height <= 0)
+                    return ToolHelpers.Error($"Could not determine rect for panel '{panel}'");
+
+                int width = (int)captureRect.width;
+                int height = (int)captureRect.height;
+                var screenPos = captureRect.position;
+
+                Color[] pixels = InternalEditorUtility.ReadScreenPixel(screenPos, width, height);
+                var tex = new Texture2D(width, height, TextureFormat.RGB24, false);
+                tex.SetPixels(pixels);
+                tex.Apply();
+
+                byte[] imageBytes = tex.EncodeToPNG();
+                UnityEngine.Object.DestroyImmediate(tex);
+
+                string base64 = Convert.ToBase64String(imageBytes);
+                string savedPath = SaveScreenshot(imageBytes, panelNameForResponse, "png");
+
+                return new JObject
+                {
+                    ["status"] = "ok",
+                    ["_image"] = base64,
+                    ["_mimeType"] = "image/png",
+                    ["width"] = width,
+                    ["height"] = height,
+                    ["panel"] = panelName,
+                    ["format"] = "png",
+                    ["gizmos"] = true,
+                    ["capturedVia"] = "screen-pixels",
+                    ["savedTo"] = savedPath
+                }.ToString(Newtonsoft.Json.Formatting.None);
+            }
+            catch (Exception ex)
+            {
+                return ToolHelpers.Error($"Gizmo screenshot failed: {ex.Message}");
+            }
         }
 
         private static string CaptureCamera(Camera camera, string cameraLabel,

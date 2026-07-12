@@ -24,6 +24,7 @@ namespace realvirtual.MCP.Serialization
         ObjectArray,          // Component[], GameObject[] etc.
         ObjectList,           // List<Component>, List<GameObject> etc.
         Serializable,         // [Serializable] classes/structs
+        SerializableList,     // List<[Serializable] struct/class> and [Serializable] struct/class arrays
         Unsupported           // UnityEvent, delegates, AnimationCurve, Gradient, etc. - skipped
     }
 
@@ -303,6 +304,11 @@ namespace realvirtual.MCP.Serialization
             if (typeof(UnityEngine.Object).IsAssignableFrom(elementType))
                 return FieldCategory.ObjectArray;
 
+            // [Serializable] struct/class arrays
+            if (elementType.IsDefined(typeof(System.SerializableAttribute), false) ||
+                (elementType.IsValueType && !elementType.IsPrimitive))
+                return FieldCategory.SerializableList;
+
             return FieldCategory.Unsupported;
         }
 
@@ -320,6 +326,11 @@ namespace realvirtual.MCP.Serialization
             // List<UnityEngine.Object>
             if (typeof(UnityEngine.Object).IsAssignableFrom(elementType))
                 return FieldCategory.ObjectList;
+
+            // List<[Serializable] struct/class>
+            if (elementType.IsDefined(typeof(System.SerializableAttribute), false) ||
+                (elementType.IsValueType && !elementType.IsPrimitive))
+                return FieldCategory.SerializableList;
 
             return FieldCategory.Unsupported;
         }

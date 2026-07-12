@@ -159,6 +159,17 @@ namespace realvirtual.MCP.Tools
             }.ToString(Formatting.None);
         }
 
+        //! Creates an error JSON response string carrying extra diagnostic data.
+        //! Used e.g. by component_set to report which fields DID apply on a partial failure,
+        //! so the caller never has to guess what actually changed.
+        public static string Error(string message, JObject extra)
+        {
+            var obj = extra ?? new JObject();
+            obj["status"] = "error";
+            obj["error"] = message;
+            return obj.ToString(Formatting.None);
+        }
+
         //! Creates a success JSON response string with data
         public static string Ok(JObject data)
         {

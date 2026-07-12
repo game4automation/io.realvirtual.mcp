@@ -15,6 +15,24 @@ namespace realvirtual.MCP
     internal static class McpClaudeDesktopConfigurator
     {
         private const string ServerName = "realvirtual-UnityMCP";
+        private const string WebViewerServerNameDesktop = "realvirtual-WebViewerMCP";
+        private const string WebViewerServerNameCode = "WebViewerMCP";
+
+        //! Absolute path to the WebViewer MCP bridge entry (dist/index.js), or null if it is not built.
+        //! When present, a "WebViewerMCP" Node entry is added on a SEPARATE port (18714); the Unity
+        //! Python server is left at its old standard (no --no-webviewer), so Unity (18711 + its own
+        //! WebViewer bridge 18712) and the Node WebViewer bridge (18714) run in parallel. When absent
+        //! (e.g. a customer install without the dev WebViewer), no extra entry is written.
+        private static string GetWebViewerBridgePath()
+        {
+            try
+            {
+                var p = Path.GetFullPath(Path.Combine(
+                    Application.dataPath, "realvirtual-WebViewer~", "mcp-bridge", "dist", "index.js"));
+                return File.Exists(p) ? p.Replace('\\', '/') : null;
+            }
+            catch { return null; }
+        }
 
         //! Returns true if Claude Desktop config contains the realvirtual MCP server entry.
         internal static bool IsConfigured
@@ -120,11 +138,22 @@ namespace realvirtual.MCP
                 if (config["mcpServers"] == null)
                     config["mcpServers"] = new JObject();
 
+                var bridgeJs = GetWebViewerBridgePath();
+
                 config["mcpServers"][ServerName] = new JObject
                 {
                     ["command"] = pythonExe.Replace('\\', '/'),
                     ["args"] = new JArray { serverScript.Replace('\\', '/') }
                 };
+
+                if (bridgeJs != null)
+                {
+                    config["mcpServers"][WebViewerServerNameDesktop] = new JObject
+                    {
+                        ["command"] = "node",
+                        ["args"] = new JArray { bridgeJs, "--web-port", "18714" }
+                    };
+                }
 
                 File.WriteAllText(configPath, config.ToString(Newtonsoft.Json.Formatting.Indented),
                     new UTF8Encoding(false));
@@ -160,11 +189,22 @@ namespace realvirtual.MCP
                 if (config["mcpServers"] == null)
                     config["mcpServers"] = new JObject();
 
+                var bridgeJs = GetWebViewerBridgePath();
+
                 config["mcpServers"]["UnityMCP"] = new JObject
                 {
                     ["command"] = pythonExe.Replace('\\', '/'),
                     ["args"] = new JArray { serverScript.Replace('\\', '/') }
                 };
+
+                if (bridgeJs != null)
+                {
+                    config["mcpServers"][WebViewerServerNameCode] = new JObject
+                    {
+                        ["command"] = "node",
+                        ["args"] = new JArray { bridgeJs, "--web-port", "18714" }
+                    };
+                }
 
                 File.WriteAllText(mcpJsonPath, config.ToString(Newtonsoft.Json.Formatting.Indented),
                     new UTF8Encoding(false));

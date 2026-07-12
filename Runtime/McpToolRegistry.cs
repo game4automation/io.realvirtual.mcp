@@ -315,11 +315,14 @@ namespace realvirtual.MCP
             {
                 var parameters = entry.Method.GetParameters();
                 var args = new object[parameters.Length];
+                // Keys already bound to an earlier parameter - so a shared alias (e.g. "path",
+                // an alias of both assetPath and name) is not consumed twice.
+                var consumedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
                 for (int i = 0; i < parameters.Length; i++)
                 {
                     var param = parameters[i];
-                    if (arguments != null && arguments.TryGetValue(param.Name, out var value))
+                    if (arguments != null && TryResolveArgument(arguments, param.Name, consumedKeys, out var value, out var usedAlias))
                     {
                         try
                         {
@@ -336,7 +339,8 @@ namespace realvirtual.MCP
                     }
                     else
                     {
-                        return $"{{\"error\":\"Missing required argument '{param.Name}'\"}}";
+                        var aliasHint = AliasHint(param.Name);
+                        return $"{{\"error\":\"Missing required argument '{param.Name}'{EscapeJson(aliasHint)}\"}}";
                     }
                 }
 
@@ -348,6 +352,83 @@ namespace realvirtual.MCP
                 McpLog.Error($"Registry: Error calling tool '{name}': {ex.Message}\n{ex.StackTrace}");
                 return $"{{\"error\":\"Tool execution failed: {EscapeJson(ex.Message)}\"}}";
             }
+        }
+
+        //! Accepted alias keys per canonical parameter name.
+        //! Lets agents use common synonyms (path/target for name, component for componentType,
+        //! query for searchTerm, ...) instead of failing with "missing required argument".
+        //! Matching is case-insensitive; the canonical parameter always wins if present.
+        private static readonly Dictionary<string, string[]> _paramAliases = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["name"] = new[] { "target", "path", "objectName", "gameObject", "object", "go" },
+            ["componentType"] = new[] { "component", "type", "componentName" },
+            ["searchTerm"] = new[] { "query", "search", "term", "q", "name" },
+            ["assetPath"] = new[] { "path", "prefabPath", "asset", "assetpath" },
+            ["methodName"] = new[] { "method" },
+            ["properties"] = new[] { "props", "values", "properties" },
+        };
+
+        //! Resolves an argument for a parameter: exact key, then case-insensitive key,
+        //! then any registered alias key. Keys already bound to an earlier parameter
+        //! (tracked in <paramref name="consumedKeys"/>) are skipped. Returns true if found.
+        private bool TryResolveArgument(Dictionary<string, object> arguments, string paramName,
+            HashSet<string> consumedKeys, out object value, out string usedAlias)
+        {
+            usedAlias = null;
+            value = null;
+
+            // 1. Exact match
+            if (!consumedKeys.Contains(paramName) && arguments.TryGetValue(paramName, out value))
+            {
+                consumedKeys.Add(paramName);
+                return true;
+            }
+
+            // 2. Case-insensitive match
+            foreach (var kv in arguments)
+            {
+                if (consumedKeys.Contains(kv.Key))
+                    continue;
+                if (string.Equals(kv.Key, paramName, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = kv.Value;
+                    usedAlias = kv.Key;
+                    consumedKeys.Add(kv.Key);
+                    return true;
+                }
+            }
+
+            // 3. Registered aliases (case-insensitive)
+            if (_paramAliases.TryGetValue(paramName, out var aliases))
+            {
+                foreach (var alias in aliases)
+                {
+                    foreach (var kv in arguments)
+                    {
+                        if (consumedKeys.Contains(kv.Key))
+                            continue;
+                        if (string.Equals(kv.Key, alias, StringComparison.OrdinalIgnoreCase))
+                        {
+                            value = kv.Value;
+                            usedAlias = kv.Key;
+                            consumedKeys.Add(kv.Key);
+                            McpLog.Debug($"Registry: accepted alias '{kv.Key}' for parameter '{paramName}'");
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            value = null;
+            return false;
+        }
+
+        //! Builds a "(you can also pass it as ...)" hint for a missing parameter.
+        private string AliasHint(string paramName)
+        {
+            if (_paramAliases.TryGetValue(paramName, out var aliases) && aliases.Length > 0)
+                return $" (this GameObject/value identifier also accepts: {string.Join(", ", aliases)})";
+            return "";
         }
 
         //! Converts argument value to target parameter type

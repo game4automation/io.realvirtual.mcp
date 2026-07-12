@@ -2,6 +2,28 @@
 
 All notable changes to the realvirtual MCP Server package.
 
+## [1.1.0] - 2026-07-12
+
+### Added
+- `editor_build` — build a player from a single scene for a target platform
+- `video_record_start` / `video_record_stop` / `video_record_status` — MP4 recording of the Game View
+- `camera_frame` — frame a GameObject or a position in the Scene or Game camera
+- `debug_marker_add` / `debug_marker_clear` — transient visual markers (cross, axes, sphere, arrow) for pointing at positions in the scene
+- `editor_get_selection` — the GameObjects currently selected in the Editor
+- `editor_scan_missing_scripts` / `editor_remove_missing_scripts` — find and remove MonoBehaviours with missing scripts in loaded scenes and prefab assets
+- `unity_kill` / `unity_restart` — Unity process control from the Python server. These run entirely OS-side, so they still work when the Editor is frozen or dead
+- Main thread stall detection in `unity_status`: a frozen Editor is now reported as blocked. Previously the WebSocket heartbeat kept answering on a background thread, so a hung Editor still looked healthy
+- Parameter aliases: common synonyms (`path`, `target`, `query`, `component`, ...) resolve to the canonical parameter instead of failing with "missing required argument"
+- Automatic configuration of the WebViewer MCP bridge when a WebViewer dev build is present, on its own port alongside the Unity server
+
+### Changed
+- `component_set` no longer reports success silently. Unknown keys, unresolved references, and type mismatches are returned as errors, and the fields that were actually written come back in `applied`
+- Component deserialization accepts `List<T>` in addition to arrays, and matches field names case-insensitively
+- Component payloads are serialized through `McpSafeJson`, which handles values that previously broke the JSON response
+
+### Fixed
+- The WebSocket port is preserved across domain reloads instead of drifting to a new one
+
 ## [1.0.2] - 2026-03-10
 
 ### Added

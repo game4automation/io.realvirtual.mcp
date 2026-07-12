@@ -13,15 +13,12 @@ namespace realvirtual.MCP.Serialization
 {
     //! Serializes MonoBehaviour components to JSON for MCP tools.
     //! Uses cached reflection data for optimal performance.
+    //! [Serializable] object graphs are serialized via McpSafeJson (fields only,
+    //! Unity-safe converters, depth/time/size budgets) - never with Newtonsoft
+    //! default settings, which walk C# property getters and freeze the editor
+    //! on Unity types (Matrix4x4.rotation asserts, .inverse/.transpose recurse).
     public static class ComponentSerializer
     {
-        // Shared JSON serializer settings for [Serializable] classes
-        private static readonly JsonSerializerSettings _jsonSettings = new JsonSerializerSettings
-        {
-            ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-            Error = (sender, args) => { args.ErrorContext.Handled = true; }
-        };
-
         //! Serializes all serializable fields of a MonoBehaviour to JObject
         public static JObject Serialize(MonoBehaviour component)
         {
@@ -32,10 +29,19 @@ namespace realvirtual.MCP.Serialization
             var reflData = ReflectionCache.GetReflectionData(type);
 
             var result = new JObject();
+            var budget = System.Diagnostics.Stopwatch.StartNew();
 
             // Serialize all fields
             foreach (var field in reflData.SerializableFields)
             {
+                // Budget guard: never block the editor main thread for seconds
+                if (budget.ElapsedMilliseconds > McpSafeJson.MaxSerializationMs)
+                {
+                    result["_truncated"] = $"serialization aborted after {budget.ElapsedMilliseconds}ms - too deep/large, use component_get with specific fields";
+                    McpLog.Warn($"Serializer: Budget exceeded serializing {type.Name}, output truncated");
+                    break;
+                }
+
                 try
                 {
                     var value = field.GetValue(component);
@@ -121,11 +127,20 @@ namespace realvirtual.MCP.Serialization
 
             var result = new JObject();
             var componentCounts = new Dictionary<string, int>();
+            var budget = System.Diagnostics.Stopwatch.StartNew();
 
             foreach (var component in go.GetComponents<MonoBehaviour>())
             {
                 if (component == null)
                     continue;
+
+                // Budget guard across all components: abort instead of freezing the editor
+                if (budget.ElapsedMilliseconds > 2 * McpSafeJson.MaxSerializationMs)
+                {
+                    result["_truncated"] = $"serialization aborted after {budget.ElapsedMilliseconds}ms - too many/large components, use component_get with a specific componentType";
+                    McpLog.Warn($"Serializer: Budget exceeded serializing all components on '{go.name}', output truncated");
+                    break;
+                }
 
                 var type = component.GetType();
 
@@ -157,6 +172,17 @@ namespace realvirtual.MCP.Serialization
                 {
                     McpLog.Warn($"Serializer: Failed to serialize component {type.Name}: {ex.Message}");
                 }
+            }
+
+            // Size guard: refuse pathological payloads instead of flooding the MCP channel
+            var payloadLength = result.ToString(Formatting.None).Length;
+            if (payloadLength > McpSafeJson.MaxOutputChars)
+            {
+                McpLog.Warn($"Serializer: Output too large ({payloadLength / 1024} KB) for all components on '{go.name}'");
+                return new JObject
+                {
+                    ["error"] = $"serialization aborted: output too large ({payloadLength / 1024} KB) - use component_get with a specific componentType and fields instead"
+                };
             }
 
             return result;
@@ -198,6 +224,9 @@ namespace realvirtual.MCP.Serialization
 
                 case FieldCategory.Serializable:
                     return SerializeSerializable(value);
+
+                case FieldCategory.SerializableList:
+                    return SerializeSerializableList(value);
 
                 default:
                     return null;
@@ -392,16 +421,44 @@ namespace realvirtual.MCP.Serialization
             if (value == null)
                 return null;
 
-            try
+            // Hardened path: fields only, Unity-safe converters, depth/time/size budgets.
+            // Never use Newtonsoft default settings here - property-getter reflection on
+            // Unity types (e.g. Matrix4x4 in [Serializable] graphs) freezes the editor.
+            var token = McpSafeJson.SerializeGuarded(value, out var error);
+            if (error != null)
             {
-                var serializer = JsonSerializer.Create(_jsonSettings);
-                return JObject.FromObject(value, serializer);
+                McpLog.Warn($"Serializer: {error}");
+                return new JValue(error);
             }
-            catch (Exception ex)
-            {
-                McpLog.Warn($"Serializer: Failed to serialize [Serializable] object: {ex.Message}");
+            return token;
+        }
+
+        private static JToken SerializeSerializableList(object value)
+        {
+            if (value == null)
                 return null;
+
+            var jArray = new JArray();
+
+            foreach (var item in (IEnumerable)value)
+            {
+                if (item == null)
+                {
+                    jArray.Add(JValue.CreateNull());
+                    continue;
+                }
+
+                var token = McpSafeJson.SerializeGuarded(item, out var error);
+                if (error != null)
+                {
+                    McpLog.Warn($"Serializer: {error}");
+                    jArray.Add(new JValue(error));
+                    break; // budget abort - stop instead of repeating per element
+                }
+                jArray.Add(token);
             }
+
+            return jArray;
         }
 
         //! Gets the full hierarchy path of a GameObject

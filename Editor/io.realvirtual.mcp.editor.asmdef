@@ -2,7 +2,9 @@
     "name": "io.realvirtual.mcp.editor",
     "rootNamespace": "realvirtual.MCP",
     "references": [
-        "io.realvirtual.mcp"
+        "io.realvirtual.mcp",
+        "Unity.Recorder.Base",
+        "Unity.Recorder.Editor"
     ],
     "includePlatforms": [
         "Editor"

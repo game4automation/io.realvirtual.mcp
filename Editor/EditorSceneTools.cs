@@ -94,6 +94,38 @@ namespace realvirtual.MCP.Tools
             }.ToString(Newtonsoft.Json.Formatting.None);
         }
 
+        //! Returns the GameObjects currently selected in the Editor (Hierarchy/Scene View) - full hierarchy
+        //! paths plus world position, so an MCP session can pick up objects the user just clicked
+        //! ("die aktuell selektierten"). activeGameObject is reported separately (it is the one whose
+        //! Inspector is shown and the last one clicked).
+        [McpTool("Get the GameObjects currently selected in the Editor", "editor_get_selection")]
+        public static string EditorGetSelection()
+        {
+            var selected = new JArray();
+            foreach (var go in Selection.gameObjects)
+            {
+                selected.Add(new JObject
+                {
+                    ["name"] = go.name,
+                    ["path"] = ToolHelpers.GetGameObjectPath(go),
+                    ["position"] = new JObject
+                    {
+                        ["x"] = go.transform.position.x,
+                        ["y"] = go.transform.position.y,
+                        ["z"] = go.transform.position.z
+                    }
+                });
+            }
+
+            return new JObject
+            {
+                ["status"] = "ok",
+                ["count"] = selected.Count,
+                ["activeGameObject"] = Selection.activeGameObject != null ? ToolHelpers.GetGameObjectPath(Selection.activeGameObject) : null,
+                ["selected"] = selected
+            }.ToString(Newtonsoft.Json.Formatting.None);
+        }
+
         //! Opens a scene by asset path
         [McpTool("Open scene by path", "editor_open_scene")]
         public static string EditorOpenScene(
@@ -281,6 +313,199 @@ namespace realvirtual.MCP.Tools
                 ["pivotRotation"] = new JObject { ["x"] = newRot.x, ["y"] = newRot.y, ["z"] = newRot.z },
                 ["size"] = sv.size,
                 ["orthographic"] = sv.orthographic
+            }.ToString(Newtonsoft.Json.Formatting.None);
+        }
+
+        //! Removes all MonoBehaviour components with missing script references from the loaded scene(s)
+        //! or from a single prefab asset.
+        //! Orphaned missing-script components (e.g. left over after a script or assembly was deleted) cause
+        //! Unity to log a warning for each one on every scene load and play-mode entry, which can block the
+        //! main thread for tens of seconds in large scenes. For scenes this strips them in-memory; the scene
+        //! is only written to disk when save is true (default false, so the change can be reverted by reloading).
+        //! When prefabPath is given, the prefab asset is loaded, stripped and (if anything was removed) saved.
+        [McpTool("Remove MonoBehaviours with missing scripts from loaded scene(s) or a prefab asset", "editor_remove_missing_scripts")]
+        public static string EditorRemoveMissingScripts(
+            [McpParam("Save the modified scene(s) to disk after removal. Default false (in-memory only, revertable by reloading).")] bool save = false,
+            [McpParam("Optional prefab asset path (e.g. 'Assets/Foo.prefab'). If set, strips missing scripts from that prefab asset and saves it instead of processing scenes.")] string prefabPath = "")
+        {
+            // Prefab asset mode
+            if (!string.IsNullOrEmpty(prefabPath))
+            {
+                if (!prefabPath.EndsWith(".prefab"))
+                    prefabPath += ".prefab";
+                if (!System.IO.File.Exists(prefabPath))
+                    return ToolHelpers.Error($"Prefab not found at '{prefabPath}'");
+
+                var root = PrefabUtility.LoadPrefabContents(prefabPath);
+                int pRemoved = 0;
+                int pAffected = 0;
+                try
+                {
+                    foreach (var t in root.GetComponentsInChildren<Transform>(true))
+                    {
+                        int r = GameObjectUtility.RemoveMonoBehavioursWithMissingScript(t.gameObject);
+                        if (r > 0) { pRemoved += r; pAffected++; }
+                    }
+
+                    if (pRemoved > 0)
+                        PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+                }
+                finally
+                {
+                    PrefabUtility.UnloadPrefabContents(root);
+                }
+
+                return new JObject
+                {
+                    ["status"] = "ok",
+                    ["message"] = $"Removed {pRemoved} missing-script component(s) from {pAffected} GameObject(s) in prefab '{prefabPath}'",
+                    ["removedComponents"] = pRemoved,
+                    ["affectedGameObjects"] = pAffected,
+                    ["prefab"] = prefabPath,
+                    ["saved"] = pRemoved > 0
+                }.ToString(Newtonsoft.Json.Formatting.None);
+            }
+
+            int removedComponents = 0;
+            int affectedGameObjects = 0;
+            int scenesProcessed = 0;
+            var dirtyScenes = new System.Collections.Generic.List<Scene>();
+
+            for (int s = 0; s < SceneManager.sceneCount; s++)
+            {
+                var scene = SceneManager.GetSceneAt(s);
+                if (!scene.isLoaded)
+                    continue;
+
+                scenesProcessed++;
+                int removedInScene = 0;
+
+                foreach (var root in scene.GetRootGameObjects())
+                {
+                    // true => include inactive GameObjects
+                    foreach (var t in root.GetComponentsInChildren<Transform>(true))
+                    {
+                        int removed = GameObjectUtility.RemoveMonoBehavioursWithMissingScript(t.gameObject);
+                        if (removed > 0)
+                        {
+                            removedComponents += removed;
+                            affectedGameObjects++;
+                            removedInScene += removed;
+                        }
+                    }
+                }
+
+                if (removedInScene > 0)
+                {
+                    EditorSceneManager.MarkSceneDirty(scene);
+                    dirtyScenes.Add(scene);
+                }
+            }
+
+            bool saved = false;
+            if (save && dirtyScenes.Count > 0)
+                saved = EditorSceneManager.SaveScenes(dirtyScenes.ToArray());
+
+            return new JObject
+            {
+                ["status"] = "ok",
+                ["message"] = $"Removed {removedComponents} missing-script component(s) from {affectedGameObjects} GameObject(s)",
+                ["removedComponents"] = removedComponents,
+                ["affectedGameObjects"] = affectedGameObjects,
+                ["scenesProcessed"] = scenesProcessed,
+                ["saved"] = saved
+            }.ToString(Newtonsoft.Json.Formatting.None);
+        }
+
+        //! Read-only scan for MonoBehaviours with missing script references in the loaded scene(s) and,
+        //! optionally, in all prefab assets under a folder. Reports the count per affected asset so a single
+        //! call reveals every scene and prefab that still carries orphaned components (the usual cause of a
+        //! slow scene load / play-mode entry). Does not modify anything – pair with editor_remove_missing_scripts.
+        [McpTool("Scan loaded scene(s) and optionally project prefabs for missing scripts (read-only)", "editor_scan_missing_scripts")]
+        public static string EditorScanMissingScripts(
+            [McpParam("Optional folder to also scan all prefab assets under (e.g. 'Assets/Mauser_Projekt_CL30'). Empty = loaded scene(s) only.")] string prefabFolder = "",
+            [McpParam("Maximum number of affected assets to list (default 50).")] int maxResults = 50)
+        {
+            var assets = new System.Collections.Generic.List<JObject>();
+            int totalMissing = 0;
+
+            // Loaded scenes
+            for (int s = 0; s < SceneManager.sceneCount; s++)
+            {
+                var scene = SceneManager.GetSceneAt(s);
+                if (!scene.isLoaded)
+                    continue;
+
+                int cnt = 0, gos = 0;
+                foreach (var root in scene.GetRootGameObjects())
+                {
+                    foreach (var t in root.GetComponentsInChildren<Transform>(true))
+                    {
+                        int c = GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(t.gameObject);
+                        if (c > 0) { cnt += c; gos++; }
+                    }
+                }
+
+                if (cnt > 0)
+                {
+                    totalMissing += cnt;
+                    assets.Add(new JObject
+                    {
+                        ["type"] = "scene",
+                        ["path"] = string.IsNullOrEmpty(scene.path) ? scene.name : scene.path,
+                        ["missingComponents"] = cnt,
+                        ["affectedGameObjects"] = gos
+                    });
+                }
+            }
+
+            // Prefab assets in folder
+            int prefabsScanned = 0;
+            if (!string.IsNullOrEmpty(prefabFolder))
+            {
+                var guids = AssetDatabase.FindAssets("t:Prefab", new[] { prefabFolder });
+                foreach (var guid in guids)
+                {
+                    var path = AssetDatabase.GUIDToAssetPath(guid);
+                    var go = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                    if (go == null)
+                        continue;
+
+                    prefabsScanned++;
+                    int cnt = 0, gos = 0;
+                    foreach (var t in go.GetComponentsInChildren<Transform>(true))
+                    {
+                        int c = GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(t.gameObject);
+                        if (c > 0) { cnt += c; gos++; }
+                    }
+
+                    if (cnt > 0)
+                    {
+                        totalMissing += cnt;
+                        assets.Add(new JObject
+                        {
+                            ["type"] = "prefab",
+                            ["path"] = path,
+                            ["missingComponents"] = cnt,
+                            ["affectedGameObjects"] = gos
+                        });
+                    }
+                }
+            }
+
+            // Sort by missing count descending, cap to maxResults
+            assets.Sort((a, b) => ((int)b["missingComponents"]).CompareTo((int)a["missingComponents"]));
+            var result = new JArray();
+            foreach (var a in assets.Take(maxResults))
+                result.Add(a);
+
+            return new JObject
+            {
+                ["status"] = "ok",
+                ["totalMissingComponents"] = totalMissing,
+                ["affectedAssets"] = assets.Count,
+                ["prefabsScanned"] = prefabsScanned,
+                ["assets"] = result
             }.ToString(Newtonsoft.Json.Formatting.None);
         }
     }

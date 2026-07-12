@@ -205,6 +205,30 @@ The activity label next to it shows the currently executing tool with elapsed ti
 
 ## Troubleshooting
 
+### Process Control: Frozen Unity Editor
+
+The Python sidecar provides rescue tools that work **even when the Unity Editor is completely frozen or dead** - they run purely OS-side, without any Unity connection:
+
+- **`unity_kill`** - Force-kills the Unity Editor process of *this* project. Process-selective: only `Unity.exe` processes whose `-projectpath` command line matches the project are killed (including asset import workers). Other Unity instances and the Python server itself are never touched. Returns the killed PIDs.
+- **`unity_restart`** - Kills the editor (same matching), waits until the PIDs are gone (max 15 s), then starts Unity again detached with `-projectpath`. The Unity exe path is remembered from the killed process; fallback is the Unity Hub installation matching `ProjectSettings/ProjectVersion.txt`. Follow up with `editor_wait_ready`.
+
+Honest editor status while the main thread hangs (the WebSocket heartbeat alone stays green because it is answered on a background thread):
+
+- **`unity_status`** reports `main_thread_inactive_s` and `main_thread_alive` (main thread pump inactivity, reported by the Unity heartbeat)
+- **`editor_wait_ready`** returns `{"status": "blocked", "main_thread_inactive_s": ..., "hint": "use unity_kill or unity_restart"}` instead of `ready` when the main thread stays blocked
+
+Typical rescue flow after a freeze ("Hold on" dialog, tools timing out):
+
+```
+unity_status          -> main_thread_alive: false
+unity_restart         -> kills + restarts the editor
+editor_wait_ready     -> wait until Unity is back
+```
+
+**Known issue:** the tool schema cache (`tool_schema_cache.json`) lives under `Assets/StreamingAssets/realvirtual-MCP/`. It is only rewritten when the tool schemas actually change, so reconnect loops no longer trigger Unity asset refresh cascades.
+
+### Common Issues
+
 **Server not starting**
 - Check Unity Console for `[MCP]` log entries
 - Toggle debug mode via the gear popup for verbose logging
