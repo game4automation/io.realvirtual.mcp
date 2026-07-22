@@ -112,6 +112,53 @@ namespace realvirtual.MCP
             EditorUtility.DisplayDialog("MCP Configuration", msg, "OK");
         }
 
+        //! Copies a complete MCP client configuration with the deployed server's absolute paths.
+        internal static void CopyMcpJsonToClipboard()
+        {
+            var mcpRoot = McpPythonDownloader.GetPythonServerPath();
+            var pythonExe = Path.GetFullPath(Path.Combine(mcpRoot, "python", "python.exe"));
+            var serverScript = Path.GetFullPath(Path.Combine(mcpRoot, "unity_mcp_server.py"));
+
+            if (!File.Exists(pythonExe) || !File.Exists(serverScript))
+            {
+                EditorUtility.DisplayDialog("MCP Configuration Error",
+                    "Python server not found. Use Tools > realvirtual > MCP > Download Python Server first.",
+                    "OK");
+                return;
+            }
+
+            EditorGUIUtility.systemCopyBuffer = BuildMcpJson(pythonExe, serverScript)
+                .ToString(Newtonsoft.Json.Formatting.Indented);
+            McpLog.Info("MCP.json configuration copied to the clipboard.");
+            EditorUtility.DisplayDialog("MCP Configuration",
+                "MCP.json copied to the clipboard. Paste it into any MCP-compatible client.",
+                "OK");
+        }
+
+        private static JObject BuildMcpJson(string pythonExe, string serverScript)
+        {
+            var servers = new JObject
+            {
+                ["UnityMCP"] = new JObject
+                {
+                    ["command"] = pythonExe.Replace('\\', '/'),
+                    ["args"] = new JArray { serverScript.Replace('\\', '/') }
+                }
+            };
+
+            var bridgeJs = GetWebViewerBridgePath();
+            if (bridgeJs != null)
+            {
+                servers[WebViewerServerNameCode] = new JObject
+                {
+                    ["command"] = "node",
+                    ["args"] = new JArray { bridgeJs, "--web-port", "18714" }
+                };
+            }
+
+            return new JObject { ["mcpServers"] = servers };
+        }
+
         private static bool WriteClaudeDesktopConfig(string pythonExe, string serverScript)
         {
             try
@@ -189,21 +236,10 @@ namespace realvirtual.MCP
                 if (config["mcpServers"] == null)
                     config["mcpServers"] = new JObject();
 
-                var bridgeJs = GetWebViewerBridgePath();
-
-                config["mcpServers"]["UnityMCP"] = new JObject
+                var generatedServers = (JObject)BuildMcpJson(pythonExe, serverScript)["mcpServers"];
+                foreach (var server in generatedServers.Properties())
                 {
-                    ["command"] = pythonExe.Replace('\\', '/'),
-                    ["args"] = new JArray { serverScript.Replace('\\', '/') }
-                };
-
-                if (bridgeJs != null)
-                {
-                    config["mcpServers"][WebViewerServerNameCode] = new JObject
-                    {
-                        ["command"] = "node",
-                        ["args"] = new JArray { bridgeJs, "--web-port", "18714" }
-                    };
+                    config["mcpServers"][server.Name] = server.Value.DeepClone();
                 }
 
                 File.WriteAllText(mcpJsonPath, config.ToString(Newtonsoft.Json.Formatting.Indented),

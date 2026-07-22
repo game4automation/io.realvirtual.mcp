@@ -19,6 +19,21 @@ namespace realvirtual.MCP.Tools
     //! the prefab contents instead of the main scene.
     public static class ToolHelpers
     {
+        //! Gets the current session identifier for a Unity object as text.
+        public static string GetObjectId(Object obj)
+        {
+            if (obj == null)
+                return null;
+
+#if UNITY_6000_4_OR_NEWER
+            return obj.GetEntityId().ToString();
+#else
+            // EntityId was introduced after Unity 6000.3. Keep older supported
+            // editors working without compiling the deprecated API in Unity 6.4+.
+            return obj.GetInstanceID().ToString();
+#endif
+        }
+
         //! Returns true if Unity is currently in prefab editing mode.
         public static bool IsInPrefabStage()
         {

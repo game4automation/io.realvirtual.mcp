@@ -330,7 +330,7 @@ namespace realvirtual.MCP
     internal class McpConfigPopup : PopupWindowContent
     {
         private const float WINDOW_WIDTH = 260f;
-        private const float WINDOW_HEIGHT = 230f;
+        private const float WINDOW_HEIGHT = 258f;
 
         public override Vector2 GetWindowSize() => new Vector2(WINDOW_WIDTH, WINDOW_HEIGHT);
 
@@ -451,6 +451,19 @@ namespace realvirtual.MCP
             configBtn.style.height = 24;
             btnContainer.Add(configBtn);
 
+            var copyConfigBtn = new Button(() =>
+            {
+                McpClaudeDesktopConfigurator.CopyMcpJsonToClipboard();
+                editorWindow.Close();
+            });
+            copyConfigBtn.text = "Copy MCP JSON";
+            copyConfigBtn.tooltip = "Copy a complete MCP client configuration with absolute server paths";
+            copyConfigBtn.SetEnabled(deployed);
+            copyConfigBtn.AddToClassList("refresh-btn");
+            copyConfigBtn.style.marginBottom = 4;
+            copyConfigBtn.style.height = 24;
+            btnContainer.Add(copyConfigBtn);
+
             var pythonBtn = new Button(() =>
             {
                 if (!deployed)
@@ -498,6 +511,12 @@ namespace realvirtual.MCP
         private static void ConfigureAll()
         {
             McpClaudeDesktopConfigurator.ConfigureClaudeDesktop();
+        }
+
+        [MenuItem("Tools/realvirtual/MCP/Copy MCP JSON", false, 901)]
+        private static void CopyMcpJson()
+        {
+            McpClaudeDesktopConfigurator.CopyMcpJsonToClipboard();
         }
 
         [MenuItem("Tools/realvirtual/MCP/Download Python Server", false, 902)]

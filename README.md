@@ -77,6 +77,7 @@ If no update button appears, remove the lock entry for `io.realvirtual.mcp` from
 
 - Unity 6000.0+
 - Newtonsoft JSON (`com.unity.nuget.newtonsoft-json`)
+- Unity Recorder (`com.unity.recorder`, installed automatically from the Unity Package Registry)
 - **git** must be installed and available in PATH (for Python server download/update) — [git-scm.com](https://git-scm.com)
 
 ## Setup
@@ -114,7 +115,24 @@ If you prefer to set up manually or the automated setup doesn't work:
    git pull
    ```
 
-3. Configure your MCP client manually (see [Python MCP Server](https://github.com/game4automation/realvirtual-MCP) for configuration details)
+3. Copy a ready-to-use configuration from **Tools > realvirtual > MCP > Copy MCP JSON**. You can paste it into any MCP-compatible client after the Python server has been installed.
+
+   Alternatively, copy the following `MCP.json` and replace `<your-project>` with the absolute path to your Unity project (use forward slashes, including on Windows):
+
+   ```json
+   {
+     "mcpServers": {
+       "UnityMCP": {
+         "command": "<your-project>/Assets/StreamingAssets/realvirtual-MCP/python/python.exe",
+         "args": [
+           "<your-project>/Assets/StreamingAssets/realvirtual-MCP/unity_mcp_server.py"
+         ]
+       }
+     }
+   }
+   ```
+
+   Some clients use a different configuration filename or wrap server entries differently. The generated command and arguments remain the same.
 
 The Python MCP server is available separately at **[github.com/game4automation/realvirtual-MCP](https://github.com/game4automation/realvirtual-MCP)**.
 

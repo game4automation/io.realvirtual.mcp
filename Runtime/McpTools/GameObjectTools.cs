@@ -64,7 +64,7 @@ namespace realvirtual.MCP.Tools
             {
                 ["name"] = go.name,
                 ["path"] = ToolHelpers.GetGameObjectPath(go),
-                ["instanceId"] = go.GetInstanceID()
+                ["instanceId"] = ToolHelpers.GetObjectId(go)
             });
         }
 
@@ -119,7 +119,7 @@ namespace realvirtual.MCP.Tools
             {
                 ["name"] = go.name,
                 ["path"] = ToolHelpers.GetGameObjectPath(go),
-                ["instanceId"] = go.GetInstanceID(),
+                ["instanceId"] = ToolHelpers.GetObjectId(go),
                 ["type"] = type
             });
         }
@@ -177,7 +177,7 @@ namespace realvirtual.MCP.Tools
             {
                 ["name"] = duplicate.name,
                 ["path"] = ToolHelpers.GetGameObjectPath(duplicate),
-                ["instanceId"] = duplicate.GetInstanceID()
+                ["instanceId"] = ToolHelpers.GetObjectId(duplicate)
             });
         }
 

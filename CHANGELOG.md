@@ -2,6 +2,17 @@
 
 All notable changes to the realvirtual MCP Server package.
 
+## [Unreleased]
+
+## [1.1.1] - 2026-07-22
+
+### Added
+- Unity Recorder is now declared as a package dependency and installs from the Unity Package Registry
+- A **Copy MCP JSON** action and copyable README example for configuring non-Claude MCP clients
+
+### Fixed
+- Unity 6000.4+ object identifiers use `GetEntityId().ToString()` instead of the deprecated `GetInstanceID()` API, while older supported Unity versions retain a compatibility fallback
+
 ## [1.1.0] - 2026-07-12
 
 ### Added

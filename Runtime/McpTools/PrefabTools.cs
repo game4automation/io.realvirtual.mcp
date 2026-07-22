@@ -56,7 +56,7 @@ namespace realvirtual.MCP.Tools
                     {
                         ["name"] = instance.name,
                         ["path"] = ToolHelpers.GetGameObjectPath(instance),
-                        ["instanceId"] = instance.GetInstanceID(),
+                        ["instanceId"] = ToolHelpers.GetObjectId(instance),
                         ["warning"] = $"Parent '{parent}' not found, instantiated at root"
                     });
                 }
@@ -67,7 +67,7 @@ namespace realvirtual.MCP.Tools
             {
                 ["name"] = instance.name,
                 ["path"] = ToolHelpers.GetGameObjectPath(instance),
-                ["instanceId"] = instance.GetInstanceID()
+                ["instanceId"] = ToolHelpers.GetObjectId(instance)
             });
         }
 
