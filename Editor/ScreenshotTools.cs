@@ -221,7 +221,8 @@ namespace realvirtual.MCP.Tools
             [McpParam("Height in pixels")] int height = 768,
             [McpParam("Camera name (empty = Main Camera)")] string camera_name = "",
             [McpParam("Image format: png or jpg")] string format = "png",
-            [McpParam("JPG quality 1-100")] int quality = 85)
+            [McpParam("JPG quality 1-100")] int quality = 85,
+            [McpParam("Also capture Screen Space Overlay UI (HMI canvases). Overlay canvases are rendered through the camera for this capture only and restored afterwards. Default false.")] bool includeUI = false)
         {
             Camera camera;
             string cameraLabel;
@@ -245,7 +246,7 @@ namespace realvirtual.MCP.Tools
             if (camera == null)
                 return ToolHelpers.Error("No camera found. Tag a camera as MainCamera or specify camera_name.");
 
-            return CaptureCamera(camera, cameraLabel, width, height, format, quality, "game");
+            return CaptureCamera(camera, cameraLabel, width, height, format, quality, "game", includeUI);
         }
 
         //! Captures the Scene View camera and returns as base64 image.
@@ -324,7 +325,7 @@ namespace realvirtual.MCP.Tools
         }
 
         private static string CaptureCamera(Camera camera, string cameraLabel,
-            int width, int height, string format, int quality, string prefix)
+            int width, int height, string format, int quality, string prefix, bool includeOverlayUI = false)
         {
             width = Mathf.Clamp(width, 64, 7680);
             height = Mathf.Clamp(height, 64, 4320);
@@ -337,9 +338,28 @@ namespace realvirtual.MCP.Tools
 
             RenderTexture rt = null;
             Texture2D tex = null;
+            var overlayCanvases = new System.Collections.Generic.List<(Canvas canvas, Camera cam, float dist)>();
 
             try
             {
+                // Screen Space Overlay canvases are composited onto the screen after all cameras and
+                // never reach a camera.Render() RenderTexture. For a UI-inclusive capture they are
+                // temporarily switched to Screen Space Camera on the capture camera.
+                if (includeOverlayUI)
+                {
+                    foreach (var canvas in UnityEngine.Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None))
+                    {
+                        if (canvas == null || !canvas.isActiveAndEnabled || canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                            continue;
+                        overlayCanvases.Add((canvas, canvas.worldCamera, canvas.planeDistance));
+                        canvas.renderMode = RenderMode.ScreenSpaceCamera;
+                        canvas.worldCamera = camera;
+                        canvas.planeDistance = camera.nearClipPlane + 0.05f;
+                    }
+                    if (overlayCanvases.Count > 0)
+                        Canvas.ForceUpdateCanvases();
+                }
+
                 rt = RenderTexture.GetTemporary(width, height, 24, RenderTextureFormat.ARGB32);
                 camera.targetTexture = rt;
                 camera.Render();
@@ -376,6 +396,13 @@ namespace realvirtual.MCP.Tools
             }
             finally
             {
+                foreach (var entry in overlayCanvases)
+                {
+                    if (entry.canvas == null) continue;
+                    entry.canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                    entry.canvas.worldCamera = entry.cam;
+                    entry.canvas.planeDistance = entry.dist;
+                }
                 camera.targetTexture = prevTarget;
                 RenderTexture.active = prevActive;
                 if (rt != null)

@@ -4,6 +4,15 @@ All notable changes to the realvirtual MCP Server package.
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-09-07
+
+### Changed
+- The historic `web_*` WebViewer proxy on port 18712 is **off by default** and now needs `--webviewer` to start. It served the `web_*` browser tools without a token and without a license check, which was a way around the community registration realvirtual CONNECT requires for the same tools. `web_*` belongs to CONNECT (`http://localhost:5100/mcp`); the Unity Editor tools of this server are unaffected and stay registration-free.
+- `--no-webviewer` is still accepted and now does nothing, so existing `.mcp.json` and Claude Desktop configurations keep working unchanged.
+
+### Note for existing installations
+An installed Python server does **not** update itself: the downloader skips a directory that is already deployed. Pull the new version once with the **Update Python Server (git pull)** button in the realvirtual MCP toolbar window; until then the old server keeps offering the unchecked proxy.
+
 ## [1.1.1] - 2026-07-22
 
 ### Added

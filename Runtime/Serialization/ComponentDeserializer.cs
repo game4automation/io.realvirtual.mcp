@@ -197,7 +197,14 @@ namespace realvirtual.MCP.Serialization
             // Get the component at the specified index
             var comp = GetComponentAtIndex(go, type, componentIndex);
             if (comp == null)
+            {
+                // Built-in components (RectTransform, Canvas, Image, ...) are property-based
+                var all = go.GetComponents(type);
+                if (all != null && componentIndex < all.Length && all[componentIndex] != null && !(all[componentIndex] is MonoBehaviour))
+                    return NativeComponentSerializer.Apply(all[componentIndex], data, appliedFields);
+
                 return new List<string> { $"Component '{componentTypeName}' (index {componentIndex}) not found on '{go.name}'" };
+            }
 
             return Deserialize(comp, data, appliedFields);
         }

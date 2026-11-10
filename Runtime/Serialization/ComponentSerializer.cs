@@ -72,9 +72,14 @@ namespace realvirtual.MCP.Serialization
             if (type == null)
                 return new JObject { ["error"] = $"Type '{componentTypeName}' not found" };
 
-            var comp = go.GetComponent(type) as MonoBehaviour;
-            if (comp == null)
+            var anyComp = go.GetComponent(type);
+            if (anyComp == null)
                 return new JObject { ["error"] = $"Component '{componentTypeName}' not found on '{go.name}'" };
+
+            // Built-in components (RectTransform, Canvas, Image, Camera, ...) carry their state in
+            // properties, not serialized fields - route them through the native serializer.
+            if (!(anyComp is MonoBehaviour comp))
+                return NativeComponentSerializer.Serialize(anyComp);
 
             return Serialize(comp);
         }
@@ -129,9 +134,14 @@ namespace realvirtual.MCP.Serialization
             var componentCounts = new Dictionary<string, int>();
             var budget = System.Diagnostics.Stopwatch.StartNew();
 
-            foreach (var component in go.GetComponents<MonoBehaviour>())
+            foreach (var component in go.GetComponents<Component>())
             {
                 if (component == null)
+                    continue;
+
+                // Plain Transform is covered by the transform_* tools; RectTransform and other
+                // built-in components are serialized property-based.
+                if (component is Transform && !(component is RectTransform))
                     continue;
 
                 // Budget guard across all components: abort instead of freezing the editor
@@ -150,7 +160,9 @@ namespace realvirtual.MCP.Serialization
 
                 try
                 {
-                    var componentData = Serialize(component);
+                    var componentData = component is MonoBehaviour mb
+                        ? Serialize(mb)
+                        : NativeComponentSerializer.Serialize(component);
                     if (componentData == null || !componentData.HasValues)
                         continue;
 

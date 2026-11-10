@@ -76,6 +76,19 @@ namespace realvirtual.MCP
             for (int offset = 0; offset <= MAX_PORT_RETRIES; offset++)
             {
                 int tryPort = _basePort + offset;
+                // ReuseAddress (needed to survive TIME_WAIT after domain reloads) also hides a live
+                // listener of another editor instance, so a bind would silently succeed on a port
+                // that is already served. Probe with a real connect first and skip busy ports.
+                if (IsPortServed(tryPort))
+                {
+                    if (offset < MAX_PORT_RETRIES)
+                    {
+                        McpLog.Debug($"WS: Port {tryPort} already served by another instance, trying {tryPort + 1}...");
+                        continue;
+                    }
+                    McpLog.Error($"WS: All ports {_basePort}-{tryPort} are served by other instances");
+                    break;
+                }
                 try
                 {
                     _wss = new WebSocketServer($"ws://127.0.0.1:{tryPort}");
@@ -106,6 +119,26 @@ namespace realvirtual.MCP
 
             _isRunning = false;
             return Task.CompletedTask;
+        }
+
+        //! Returns true when something already accepts TCP connections on the given loopback port.
+        private static bool IsPortServed(int port)
+        {
+            try
+            {
+                using (var client = new System.Net.Sockets.TcpClient())
+                {
+                    var ar = client.BeginConnect(System.Net.IPAddress.Loopback, port, null, null);
+                    if (!ar.AsyncWaitHandle.WaitOne(150))
+                        return false;
+                    client.EndConnect(ar);
+                    return true;
+                }
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         //! Stops the WebSocket server.

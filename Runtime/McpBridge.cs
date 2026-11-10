@@ -239,6 +239,11 @@ namespace realvirtual.MCP
         }
 
         //! Starts the embedded Python MCP server from the external deployment directory.
+        //!
+        //! Tool ownership (plan-327 AP1): this server owns the Unity Editor tools; the web_* browser
+        //! tools belong to realvirtual CONNECT (http://localhost:5100/mcp). The arguments below
+        //! deliberately still omit --no-webviewer, so the Python server keeps announcing its historic
+        //! web_* proxy as well. Arming that flag across all start paths is the follow-up plan (348).
         public void StartMcpServer()
         {
             if (_mcpProcess != null && !_mcpProcess.HasExited)
